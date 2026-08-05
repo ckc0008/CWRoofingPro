@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* CW Roofing — Dark Industrial + Lime Green */
+    --background: 220 15% 8%;
+    --foreground: 0 0% 95%;
+    --card: 220 14% 11%;
+    --card-foreground: 0 0% 95%;
+    --popover: 220 14% 11%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 88 100% 37%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 220 12% 16%;
+    --muted-foreground: 220 5% 55%;
+    --accent: 88 100% 37%;
+    --accent-foreground: 0 0% 5%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 10% 20%;
+    --input: 220 10% 20%;
+    --ring: 88 100% 37%;
+    --radius: 0.5rem;
+
+    /* Custom tokens */
+    --color-green: #5cbf00;
+    --color-green-dark: #4a9e00;
+    --color-green-light: #7de600;
+    --color-green-dim: rgba(92, 191, 0, 0.15);
+    --color-bg: #141618;
+    --color-surface: #1a1d20;
+    --color-surface-2: #1e2226;
+    --color-border: #2a2f35;
+    --color-text: #f0f0f0;
+    --color-muted: #8a9099;
+    --font-display: 'Barlow Condensed', 'Impact', sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100dvh;
+  }
+}
+
+@layer components {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .cw-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold;
+  }
+
+  .stat-card {
+    @apply rounded-xl p-5 border;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
+
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table th {
+    @apply text-left py-2.5 px-3 font-medium border-b;
+    color: var(--color-muted);
+    border-color: var(--color-border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .data-table td {
+    @apply py-3 px-3 border-b;
+    border-color: var(--color-border);
+  }
+  .data-table tr:hover td {
+    background: var(--color-surface-2);
+  }
+
+  .section-panel {
+    @apply rounded-xl border;
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
+
+  .green-glow {
+    box-shadow: 0 0 20px rgba(92, 191, 0, 0.15);
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4248; }
