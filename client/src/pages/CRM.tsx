@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient, API_BASE } from "@/lib/queryClient";
@@ -44,7 +45,7 @@ function LeadForm({ onClose, existing }: { onClose: () => void; existing?: any }
     mutationFn: async (data: any) => {
       const url = existing ? `/api/leads/${existing.id}` : "/api/leads";
       const method = existing ? "PATCH" : "POST";
-      const res = await fetch(`${API_BASE}${url}`, {
+      const res = await authenticatedFetch(`${API_BASE}${url}`, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -212,7 +213,7 @@ export default function CRM() {
     <div className="space-y-5 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>CRM — LEADS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>CRM — LEADS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>{leads.length} total contacts</p>
         </div>
         <Button data-testid="button-new-lead" onClick={() => setShowForm(true)}

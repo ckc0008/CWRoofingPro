@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: cw-roofing-pro
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: SUPABASE_URL
+        value: https://bydrecvgwkayqauxbwnq.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_uyNJUVRNa6N1sMucXNctTg_5W-VEL22
+      - key: PORT
+        value: 5000

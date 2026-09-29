@@ -97,7 +97,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
     <div className="space-y-5">
       {/* Step 1: Select Lead + Address */}
       <div className="p-4 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
-        <div className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>
+        <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 14 }}>
           1 — SELECT LEAD & ADDRESS
         </div>
         <div className="grid grid-cols-1 gap-3">
@@ -170,7 +170,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
 
       {/* Step 2: Measurements */}
       <div className="p-4 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
-        <div className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>2 — MEASUREMENTS & SCOPE</div>
+        <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 14 }}>2 — MEASUREMENTS & SCOPE</div>
         <div className="grid grid-cols-3 gap-3">
           <div>
             <Label style={{ color: "var(--color-muted)", fontSize: 11 }}>ROOF SQUARES *</Label>
@@ -220,7 +220,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
 
       {/* Step 3: Live Estimate */}
       <div className="p-4 rounded-lg" style={{ background: "rgba(92,191,0,0.06)", border: "1px solid rgba(92,191,0,0.2)" }}>
-        <div className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>3 — INSTANT ESTIMATE</div>
+        <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 14 }}>3 — INSTANT ESTIMATE</div>
         <div className="grid grid-cols-2 gap-2">
           {[
             ["Labor", calcs.labor],
@@ -229,7 +229,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
             ["Dumpster", calcs.dumpsterCost],
             ["Permit", calcs.permitCost],
             hasGutter ? ["Gutters", calcs.gutterCost] : null,
-          ].filter(Boolean).map(([k, v]) => (
+          ].filter((item): item is (string | number)[] => item !== null).map(([k, v]) => (
             <div key={k as string} className="flex justify-between py-1.5"
               style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 13 }}>
               <span style={{ color: "var(--color-muted)" }}>{k}</span>
@@ -246,7 +246,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div className="flex justify-between mt-3 pt-3" style={{ borderTop: "1px solid rgba(92,191,0,0.3)" }}>
-          <span className="font-display font-bold text-white" style={{ fontSize: 18 }}>TOTAL</span>
+          <span className="font-display font-bold text-foreground" style={{ fontSize: 18 }}>TOTAL</span>
           <span className="font-display font-bold" style={{ fontSize: 24, color: "var(--color-green)" }}>
             ${calcs.totalAmount.toLocaleString()}
           </span>
@@ -290,7 +290,7 @@ export default function Estimates() {
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>ESTIMATES</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>ESTIMATES</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Satellite-powered instant quotes</p>
         </div>
         <Button data-testid="button-new-estimate" onClick={() => setShowBuilder(true)}

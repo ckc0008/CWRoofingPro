@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -58,7 +59,7 @@ export default function ProjectDetail() {
     Array.from(files).forEach(f => formData.append("photos", f));
     formData.append("tag", uploadTag);
     try {
-      const res = await fetch(`/api/projects/${id}/photos`, {
+      const res = await authenticatedFetch(`/api/projects/${id}/photos`, {
         method: "POST",
         body: formData,
       });
@@ -126,7 +127,7 @@ export default function ProjectDetail() {
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 24 }}>{project.name.toUpperCase()}</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 24 }}>{project.name.toUpperCase()}</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>{project.address}</p>
           <span className="cw-badge mt-2" style={{ color: "#0ea5e9", background: "rgba(14,165,233,0.12)", textTransform: "capitalize" }}>
             {project.type.replace(/-/g, " ")}
@@ -205,7 +206,7 @@ export default function ProjectDetail() {
       {/* Upload Tag + Photos */}
       <div className="section-panel p-5">
         <div className="flex items-center gap-4 mb-5 flex-wrap">
-          <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>PHOTOS ({photos.length})</h3>
+          <h3 className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>PHOTOS ({photos.length})</h3>
           <div className="flex items-center gap-2 ml-auto">
             <Tag size={13} style={{ color: "var(--color-muted)" }} />
             <span style={{ fontSize: 12, color: "var(--color-muted)" }}>Upload tag:</span>
@@ -279,7 +280,7 @@ export default function ProjectDetail() {
       {selectedPhoto && (
         <div className="section-panel p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>PHOTO ANALYSIS</h3>
+            <h3 className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>PHOTO ANALYSIS</h3>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => reanalyze(selectedPhoto.id)}
                 className="text-xs flex items-center gap-1.5"
@@ -341,7 +342,7 @@ export default function ProjectDetail() {
       {report && (
         <div className="section-panel p-5">
           <div className="flex items-center justify-between mb-5">
-            <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>INSPECTION REPORT</h3>
+            <h3 className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>INSPECTION REPORT</h3>
             <Button size="sm" variant="outline" onClick={() => setReport(null)}
               style={{ borderColor: "var(--color-border)", color: "var(--color-muted)", background: "transparent", fontSize: 12 }}>
               Close

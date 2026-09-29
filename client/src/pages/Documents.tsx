@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient, API_BASE } from "@/lib/queryClient";
@@ -63,7 +64,7 @@ function UploadDialog({ onClose, leads, jobs }: { onClose: () => void; leads: an
       if (jobId) formData.append("jobId", jobId);
       if (notes) formData.append("notes", notes);
 
-      const res = await fetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: formData });
+      const res = await authenticatedFetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: formData });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || res.statusText);
@@ -222,7 +223,7 @@ export default function Documents() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>DOCUMENT STORAGE</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>DOCUMENT STORAGE</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Upload and manage job documents</p>
         </div>
         <Button

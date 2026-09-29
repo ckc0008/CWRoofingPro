@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -20,7 +21,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   return (
     <div className="section-panel p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>{title}</h3>
+        <h3 className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -88,7 +89,7 @@ function DocumentUploadDialog({ leadId, open, onClose }: { leadId: number; open:
       fd.append("docType", docType);
       fd.append("leadId", String(leadId));
       if (notes) fd.append("notes", notes);
-      const res = await fetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: fd });
+      const res = await authenticatedFetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
       queryClient.invalidateQueries({ queryKey: ["/api/leads", String(leadId), "documents"] });
       toast({ title: "Document uploaded successfully" });
@@ -266,7 +267,7 @@ export default function LeadDetail() {
     try {
       const fd = new FormData();
       fd.append("report", file);
-      const res = await fetch(`${API_BASE}/api/leads/${id}/measurements/upload-report`, { method: "POST", body: fd });
+      const res = await authenticatedFetch(`${API_BASE}/api/leads/${id}/measurements/upload-report`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/leads", id, "measurements"] });
@@ -322,7 +323,7 @@ export default function LeadDetail() {
             {lead.firstName[0]}{lead.lastName[0]}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-white" style={{ fontSize: 24 }}>
+            <h1 className="font-display font-bold text-foreground" style={{ fontSize: 24 }}>
               {lead.firstName.toUpperCase()} {lead.lastName.toUpperCase()}
             </h1>
             <div className="flex flex-wrap items-center gap-4 mt-1">

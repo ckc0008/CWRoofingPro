@@ -123,7 +123,7 @@ export default function PhotoProjects() {
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>PHOTO REPORTS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>PHOTO REPORTS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>AI-powered damage documentation</p>
         </div>
         <Button data-testid="button-new-project" onClick={() => setShowForm(true)}

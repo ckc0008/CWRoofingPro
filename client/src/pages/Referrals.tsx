@@ -242,7 +242,7 @@ export default function Referrals() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>REFERRAL SOURCES</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>REFERRAL SOURCES</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Track where your leads come from</p>
         </div>
         <Button
@@ -272,7 +272,7 @@ export default function Referrals() {
       {/* Lead Source Breakdown (bar chart) */}
       {sortedSources.length > 0 && (
         <div className="section-panel p-5">
-          <div className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>
+          <div className="font-display font-bold text-foreground mb-4" style={{ fontSize: 14 }}>
             LEAD SOURCE BREAKDOWN
           </div>
           <div className="space-y-3">
@@ -304,7 +304,7 @@ export default function Referrals() {
       {/* Referral Sources Table */}
       <div className="section-panel overflow-hidden">
         <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <div className="font-display font-bold text-white" style={{ fontSize: 14 }}>MANAGED SOURCES</div>
+          <div className="font-display font-bold text-foreground" style={{ fontSize: 14 }}>MANAGED SOURCES</div>
         </div>
         {loadingSources ? (
           <div className="p-8 text-center" style={{ color: "var(--color-muted)" }}>Loading...</div>
