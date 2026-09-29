@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient, API_BASE } from "@/lib/queryClient";
@@ -44,7 +45,7 @@ function LeadForm({ onClose, existing }: { onClose: () => void; existing?: any }
     mutationFn: async (data: any) => {
       const url = existing ? `/api/leads/${existing.id}` : "/api/leads";
       const method = existing ? "PATCH" : "POST";
-      const res = await fetch(`${API_BASE}${url}`, {
+      const res = await authenticatedFetch(`${API_BASE}${url}`, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -88,7 +89,7 @@ function DocumentUploadDialog({ leadId, open, onClose }: { leadId: number; open:
       fd.append("docType", docType);
       fd.append("leadId", String(leadId));
       if (notes) fd.append("notes", notes);
-      const res = await fetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: fd });
+      const res = await authenticatedFetch(`${API_BASE}/api/documents/upload`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
       queryClient.invalidateQueries({ queryKey: ["/api/leads", String(leadId), "documents"] });
       toast({ title: "Document uploaded successfully" });
@@ -266,7 +267,7 @@ export default function LeadDetail() {
     try {
       const fd = new FormData();
       fd.append("report", file);
-      const res = await fetch(`${API_BASE}/api/leads/${id}/measurements/upload-report`, { method: "POST", body: fd });
+      const res = await authenticatedFetch(`${API_BASE}/api/leads/${id}/measurements/upload-report`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/leads", id, "measurements"] });

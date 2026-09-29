@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "@/lib/auth";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -58,7 +59,7 @@ export default function ProjectDetail() {
     Array.from(files).forEach(f => formData.append("photos", f));
     formData.append("tag", uploadTag);
     try {
-      const res = await fetch(`/api/projects/${id}/photos`, {
+      const res = await authenticatedFetch(`/api/projects/${id}/photos`, {
         method: "POST",
         body: formData,
       });

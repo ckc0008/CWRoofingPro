@@ -30,14 +30,14 @@ function SettingField({ label, description, settingKey, type = "text", placehold
   });
   const currentVal = settings.find((s: any) => s.key === settingKey)?.value || "";
   const isMasked = currentVal === "***";
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => {
       // Don't overwrite with "***" if user hasn't typed a new value
       if (isMasked && value === "") return Promise.resolve({});
-      return apiRequest("POST", "/api/settings", { key: settingKey, value }).then(r => r.json());
+      return apiRequest("POST", "/api/settings", { key: settingKey, value: value ?? currentVal }).then(r => r.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
@@ -47,6 +47,10 @@ function SettingField({ label, description, settingKey, type = "text", placehold
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
   });
 
+  if (settingKey.endsWith("_api_key")) return (
+    <div><Label>{label}</Label><p className="mt-2 text-sm text-slate-400">Managed by your administrator in hosting settings as {settingKey.toUpperCase()}.</p></div>
+  );
+
   return (
     <div>
       <Label style={{ color: "var(--color-text)", fontSize: 13, fontWeight: 600 }}>{label}</Label>
@@ -55,7 +59,7 @@ function SettingField({ label, description, settingKey, type = "text", placehold
         <Input
           data-testid={`setting-${settingKey}`}
           type={type}
-          value={value}
+          value={value ?? currentVal}
           onChange={e => setValue(e.target.value)}
           placeholder={isMasked ? "••••••• (saved — paste new value to change)" : placeholder}
           className="flex-1"
@@ -108,7 +112,7 @@ export default function Settings() {
       <SettingGroup title="EMAIL DELIVERY" icon={Mail} color="#f59e0b">
         <SettingField
           label="SendGrid API Key"
-          description="Used to actually deliver emails. Without this, emails are logged only. Get your key at sendgrid.com."
+          description="Email delivery is not connected yet. Messages are saved as pending."
           settingKey="sendgrid_api_key"
           type="password"
           placeholder="SG...."

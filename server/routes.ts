@@ -1,7 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { uploadCompanyFile, downloadCompanyFile } from "./files";
+import { installAuthentication, requestDatabase } from "./supabase";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
@@ -18,7 +22,7 @@ async function extractPhotoMeta(filePath: string): Promise<{ lat?: number; lng?:
     let address: string | undefined;
     // Reverse-geocode if we have GPS and an API key
     if (lat && lng) {
-      const apiKey = storage.getSetting("google_maps_api_key");
+      const apiKey = (await storage.getSetting("google_maps_api_key"));
       if (apiKey) {
         try {
           const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
@@ -47,13 +51,13 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 // Find the closest lead to GPS coords (within 150m)
 async function matchLeadToGPS(lat: number, lng: number, address?: string): Promise<{ lead: any; method: string } | null> {
-  const apiKey = storage.getSetting("google_maps_api_key");
-  const allLeads = storage.getLeads();
+  const apiKey = (await storage.getSetting("google_maps_api_key"));
+  const allLeads = (await storage.getLeads());
   if (!allLeads.length) return null;
 
   // Method 1: Address text match if we have a reverse-geocoded address
   if (address) {
-    const matched = storage.findLeadByAddress(address);
+    const matched = (await storage.findLeadByAddress(address));
     if (matched) return { lead: matched, method: "address" };
   }
 
@@ -84,7 +88,7 @@ async function matchLeadToGPS(lat: number, lng: number, address?: string): Promi
 
   // Method 3: Address-only text match as fallback
   if (address) {
-    const matched = storage.findLeadByAddress(address);
+    const matched = (await storage.findLeadByAddress(address));
     if (matched) return { lead: matched, method: "address-fallback" };
   }
 
@@ -92,14 +96,14 @@ async function matchLeadToGPS(lat: number, lng: number, address?: string): Promi
 }
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), "uploads");
+const uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "cw-uploads-"));
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: uploadsDir,
     filename: (req, file, cb) => {
-      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const unique = randomUUID();
       cb(null, unique + path.extname(file.originalname));
     },
   }),
@@ -115,27 +119,21 @@ const uploadDoc = multer({
   storage: multer.diskStorage({
     destination: uploadsDir,
     filename: (req, file, cb) => {
-      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const unique = randomUUID();
       cb(null, unique + path.extname(file.originalname));
     },
   }),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB for large PDFs
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = /pdf|jpg|jpeg|png|gif|webp|doc|docx|xls|xlsx|txt|csv|xml/;
-    const mimeOk = file.mimetype === "application/pdf"
-      || file.mimetype === "text/xml"
-      || file.mimetype === "application/xml"
-      || file.mimetype.startsWith("image/")
-      || file.mimetype.startsWith("application/")
-      || file.mimetype.startsWith("text/");
-    cb(null, allowed.test(ext) || mimeOk);
+    const allowed = new Set([".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".doc", ".docx", ".xls", ".xlsx", ".txt", ".csv", ".xml"]);
+    cb(null, allowed.has(ext));
   },
 });
 
 // AI photo analysis (uses OpenAI if key configured, else returns placeholder)
-async function analyzePhotoWithAI(imagePath: string, tag: string): Promise<{ description: string; damageLevel: string }> {
-  const openaiKey = storage.getSetting("openai_api_key");
+async function analyzePhotoWithAI(imagePath: string | Buffer, tag: string, contentType = "image/jpeg"): Promise<{ description: string; damageLevel: string }> {
+  const openaiKey = (await storage.getSetting("openai_api_key"));
   if (!openaiKey) {
     return {
       description: "AI analysis not configured. Add your OpenAI API key in Settings to enable automatic damage descriptions.",
@@ -145,10 +143,10 @@ async function analyzePhotoWithAI(imagePath: string, tag: string): Promise<{ des
   try {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI({ apiKey: openaiKey });
-    const imageData = fs.readFileSync(imagePath);
+    const imageData = Buffer.isBuffer(imagePath) ? imagePath : fs.readFileSync(imagePath);
     const base64 = imageData.toString("base64");
-    const ext = path.extname(imagePath).slice(1).toLowerCase();
-    const mimeType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+    const ext = typeof imagePath === "string" ? path.extname(imagePath).slice(1).toLowerCase() : "";
+    const mimeType = ext ? (ext === "jpg" ? "image/jpeg" : `image/${ext}`) : contentType;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -207,7 +205,7 @@ async function fetchNOAAAlerts(state = "TX"): Promise<any[]> {
 //   Body: { address: string, lat?: number, lng?: number }
 //
 async function getArtemisRoofReport(address: string, lat?: number, lng?: number): Promise<any> {
-  const apiKey = storage.getSetting("artemis_api_key");
+  const apiKey = (await storage.getSetting("artemis_api_key"));
   if (!apiKey) return null;
   try {
     const body: any = { address };
@@ -257,7 +255,7 @@ function parseArtemisReport(data: any, address: string): any {
 
 // Google Solar API roof measurement
 async function getGoogleSolarData(lat: number, lng: number): Promise<any> {
-  const apiKey = storage.getSetting("google_maps_api_key");
+  const apiKey = (await storage.getSetting("google_maps_api_key"));
   if (!apiKey) return null;
   try {
     const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=HIGH&key=${apiKey}`;
@@ -270,7 +268,7 @@ async function getGoogleSolarData(lat: number, lng: number): Promise<any> {
 
 // Geocode address to lat/lng
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  const apiKey = storage.getSetting("google_maps_api_key");
+  const apiKey = (await storage.getSetting("google_maps_api_key"));
   if (!apiKey) return null;
   try {
     const encoded = encodeURIComponent(address);
@@ -286,28 +284,31 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 }
 
 export function registerRoutes(httpServer: Server, app: Express): void {
-  // Serve uploaded photos
-  app.use("/uploads", (req, res, next) => {
-    // No wildcard CORS — same-origin frontend doesn't need it
+  installAuthentication(app);
+  // Temporary upload bytes are removed after each request; durable files live in private Storage.
+  app.use("/api", (req, res, next) => {
+    res.on("finish", () => {
+      const files = [req.file, ...(Array.isArray(req.files) ? req.files : [])].filter(Boolean) as Express.Multer.File[];
+      for (const file of files) fs.promises.unlink(file.path).catch(() => {});
+    });
     next();
   });
-  app.use("/uploads", require("express").static(uploadsDir));
 
   // ─── LEADS ───────────────────────────────────────────────────────────────
-  app.get("/api/leads", (req, res) => {
+  app.get("/api/leads", async (req, res) => {
     const { q } = req.query;
     if (q && typeof q === "string") {
-      res.json(storage.searchLeads(q));
+      res.json((await storage.searchLeads(q)));
     } else {
-      res.json(storage.getLeads());
+      res.json((await storage.getLeads()));
     }
   });
-  app.get("/api/leads/:id", (req, res) => {
-    const lead = storage.getLead(Number(req.params.id));
+  app.get("/api/leads/:id", async (req, res) => {
+    const lead = (await storage.getLead(Number(req.params.id)));
     if (!lead) return res.status(404).json({ error: "Not found" });
     res.json(lead);
   });
-  app.post("/api/leads", (req, res) => {
+  app.post("/api/leads", async (req, res) => {
     try {
       const body = {
         firstName: req.body.firstName || "",
@@ -324,7 +325,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         assignedTo: req.body.assignedTo || null,
         roofAge: req.body.roofAge ? Number(req.body.roofAge) : null,
         roofType: req.body.roofType || null,
-        insuranceClaim: req.body.insuranceClaim ? 1 : 0,
+        insuranceClaim: Boolean(req.body.insuranceClaim),
         insuranceCompany: req.body.insuranceCompany || null,
         claimNumber: req.body.claimNumber || null,
         followUpDate: req.body.followUpDate || null,
@@ -332,56 +333,56 @@ export function registerRoutes(httpServer: Server, app: Express): void {
       if (!body.firstName || !body.lastName) {
         return res.status(400).json({ error: "First and last name are required" });
       }
-      const lead = storage.createLead(body);
+      const lead = (await storage.createLead(body));
       res.json(lead);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/leads/:id", (req, res) => {
-    const lead = storage.updateLead(Number(req.params.id), req.body);
+  app.patch("/api/leads/:id", async (req, res) => {
+    const lead = (await storage.updateLead(Number(req.params.id), req.body));
     if (!lead) return res.status(404).json({ error: "Not found" });
     res.json(lead);
   });
-  app.delete("/api/leads/:id", (req, res) => {
-    const ok = storage.deleteLead(Number(req.params.id));
+  app.delete("/api/leads/:id", async (req, res) => {
+    const ok = (await storage.deleteLead(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── JOBS ─────────────────────────────────────────────────────────────────
-  app.get("/api/jobs", (req, res) => res.json(storage.getJobs()));
-  app.get("/api/jobs/:id", (req, res) => {
-    const job = storage.getJob(Number(req.params.id));
+  app.get("/api/jobs", async (req, res) => res.json((await storage.getJobs())));
+  app.get("/api/jobs/:id", async (req, res) => {
+    const job = (await storage.getJob(Number(req.params.id)));
     if (!job) return res.status(404).json({ error: "Not found" });
     res.json(job);
   });
-  app.get("/api/leads/:leadId/jobs", (req, res) => {
-    res.json(storage.getJobsByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/jobs", async (req, res) => {
+    res.json((await storage.getJobsByLead(Number(req.params.leadId))));
   });
-  app.post("/api/jobs", (req, res) => {
-    try { res.json(storage.createJob(req.body)); }
+  app.post("/api/jobs", async (req, res) => {
+    try { res.json((await storage.createJob(req.body))); }
     catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/jobs/:id", (req, res) => {
-    const job = storage.updateJob(Number(req.params.id), req.body);
+  app.patch("/api/jobs/:id", async (req, res) => {
+    const job = (await storage.updateJob(Number(req.params.id), req.body));
     if (!job) return res.status(404).json({ error: "Not found" });
     res.json(job);
   });
 
   // ─── ESTIMATES ────────────────────────────────────────────────────────────
-  app.get("/api/estimates", (req, res) => res.json(storage.getEstimates()));
-  app.get("/api/estimates/:id", (req, res) => {
-    const est = storage.getEstimate(Number(req.params.id));
+  app.get("/api/estimates", async (req, res) => res.json((await storage.getEstimates())));
+  app.get("/api/estimates/:id", async (req, res) => {
+    const est = (await storage.getEstimate(Number(req.params.id)));
     if (!est) return res.status(404).json({ error: "Not found" });
     res.json(est);
   });
-  app.get("/api/leads/:leadId/estimates", (req, res) => {
-    res.json(storage.getEstimatesByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/estimates", async (req, res) => {
+    res.json((await storage.getEstimatesByLead(Number(req.params.leadId))));
   });
-  app.post("/api/estimates", (req, res) => {
-    try { res.json(storage.createEstimate(req.body)); }
+  app.post("/api/estimates", async (req, res) => {
+    try { res.json((await storage.createEstimate(req.body))); }
     catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/estimates/:id", (req, res) => {
-    const est = storage.updateEstimate(Number(req.params.id), req.body);
+  app.patch("/api/estimates/:id", async (req, res) => {
+    const est = (await storage.updateEstimate(Number(req.params.id), req.body));
     if (!est) return res.status(404).json({ error: "Not found" });
     res.json(est);
   });
@@ -441,13 +442,13 @@ export function registerRoutes(httpServer: Server, app: Express): void {
   });
 
   // ─── STORM / WEATHER ALERTS ───────────────────────────────────────────────
-  app.get("/api/storm-alerts", (req, res) => res.json(storage.getStormAlerts()));
-  app.post("/api/storm-alerts", (req, res) => {
-    try { res.json(storage.createStormAlert(req.body)); }
+  app.get("/api/storm-alerts", async (req, res) => res.json((await storage.getStormAlerts())));
+  app.post("/api/storm-alerts", async (req, res) => {
+    try { res.json((await storage.createStormAlert(req.body))); }
     catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/storm-alerts/:id", (req, res) => {
-    const alert = storage.updateStormAlert(Number(req.params.id), req.body);
+  app.patch("/api/storm-alerts/:id", async (req, res) => {
+    const alert = (await storage.updateStormAlert(Number(req.params.id), req.body));
     if (!alert) return res.status(404).json({ error: "Not found" });
     res.json(alert);
   });
@@ -477,34 +478,34 @@ export function registerRoutes(httpServer: Server, app: Express): void {
   });
 
   // Find leads affected by a storm (by ZIP)
-  app.post("/api/storm-alerts/:id/find-leads", (req, res) => {
-    const alert = storage.getStormAlert(Number(req.params.id));
+  app.post("/api/storm-alerts/:id/find-leads", async (req, res) => {
+    const alert = (await storage.getStormAlert(Number(req.params.id)));
     if (!alert) return res.status(404).json({ error: "Not found" });
     const zips: string[] = JSON.parse(alert.affectedZips || "[]");
-    const affected = storage.getLeadsByZip(zips);
+    const affected = (await storage.getLeadsByZip(zips));
     res.json(affected);
   });
 
   // ─── PROJECTS ─────────────────────────────────────────────────────────────
-  app.get("/api/projects", (req, res) => res.json(storage.getProjects()));
-  app.get("/api/projects/:id", (req, res) => {
-    const proj = storage.getProject(Number(req.params.id));
+  app.get("/api/projects", async (req, res) => res.json((await storage.getProjects())));
+  app.get("/api/projects/:id", async (req, res) => {
+    const proj = (await storage.getProject(Number(req.params.id)));
     if (!proj) return res.status(404).json({ error: "Not found" });
     res.json(proj);
   });
-  app.post("/api/projects", (req, res) => {
-    try { res.json(storage.createProject(req.body)); }
+  app.post("/api/projects", async (req, res) => {
+    try { res.json((await storage.createProject(req.body))); }
     catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/projects/:id", (req, res) => {
-    const proj = storage.updateProject(Number(req.params.id), req.body);
+  app.patch("/api/projects/:id", async (req, res) => {
+    const proj = (await storage.updateProject(Number(req.params.id), req.body));
     if (!proj) return res.status(404).json({ error: "Not found" });
     res.json(proj);
   });
 
   // ─── PHOTOS ───────────────────────────────────────────────────────────────
-  app.get("/api/projects/:projectId/photos", (req, res) => {
-    res.json(storage.getPhotosByProject(Number(req.params.projectId)));
+  app.get("/api/projects/:projectId/photos", async (req, res) => {
+    res.json((await storage.getPhotosByProject(Number(req.params.projectId))));
   });
 
   app.post("/api/projects/:projectId/photos", upload.array("photos", 20), async (req, res) => {
@@ -516,12 +517,12 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     const leadMatches: any[] = [];
 
     for (const file of files) {
-      const url = `/uploads/${file.filename}`;
+      const url = await uploadCompanyFile(file);
 
       // Extract EXIF/GPS metadata from the photo
       const meta = await extractPhotoMeta(file.path);
 
-      const photo = storage.createPhoto({
+      const photo = (await storage.createPhoto({
         projectId,
         filename: file.filename,
         originalName: file.originalname,
@@ -533,84 +534,50 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         latitude: meta.lat ?? null,
         longitude: meta.lng ?? null,
         takenAt: meta.dateTaken ?? null,
-      });
+      }));
 
-      // Auto-match to a lead via GPS/address
-      if (meta.lat && meta.lng) {
-        matchLeadToGPS(meta.lat, meta.lng, meta.address).then(match => {
-          if (match) {
-            leadMatches.push({
-              photoId: photo.id,
-              leadId: match.lead.id,
-              leadName: `${match.lead.firstName} ${match.lead.lastName}`,
-              leadAddress: match.lead.address,
-              method: match.method,
-              gpsAddress: meta.address,
-            });
-          }
-        });
-      } else if (meta.address) {
-        // No GPS but we have address from EXIF — try text match
-        const matched = storage.findLeadByAddress(meta.address);
-        if (matched) {
-          leadMatches.push({
-            photoId: photo.id,
-            leadId: matched.id,
-            leadName: `${matched.firstName} ${matched.lastName}`,
-            leadAddress: matched.address,
-            method: "exif-address",
-            gpsAddress: meta.address,
-          });
-        }
-      }
-
-      // Trigger AI analysis async
-      analyzePhotoWithAI(file.path, tag).then(({ description, damageLevel }) => {
-        storage.updatePhoto(photo.id, {
-          aiDescription: description,
-          aiDamageLevel: damageLevel,
-          aiAnalyzed: true,
-        });
-      });
-
+      const match = meta.lat && meta.lng ? await matchLeadToGPS(meta.lat, meta.lng, meta.address) : null;
+      if (match) leadMatches.push({ photoId: photo.id, leadId: match.lead.id,
+        leadName: `${match.lead.firstName} ${match.lead.lastName}`, leadAddress: match.lead.address,
+        method: match.method, gpsAddress: meta.address });
+      // Explicit re-analysis is available from the photo screen; uploads finish after durable storage.
       results.push({ ...photo, exifLat: meta.lat, exifLng: meta.lng, exifAddress: meta.address, exifDate: meta.dateTaken });
     }
 
-    // Small delay to allow async GPS match to settle, then return
-    await new Promise(r => setTimeout(r, 300));
     res.json({ photos: results, leadMatches });
   });
 
-  app.delete("/api/photos/:id", (req, res) => {
-    const photo = storage.getPhotosByProject(0); // just check
-    storage.deletePhoto(Number(req.params.id));
+  app.delete("/api/photos/:id", async (req, res) => {
+    (await storage.deletePhoto(Number(req.params.id)));
     res.json({ success: true });
   });
 
   // Re-analyze a photo with AI
   app.post("/api/photos/:id/analyze", async (req, res) => {
     // Find the photo across all projects
-    const allProjects = storage.getProjects();
+    const allProjects = (await storage.getProjects());
     let targetPhoto = null;
     for (const proj of allProjects) {
-      const photos = storage.getPhotosByProject(proj.id);
+      const photos = (await storage.getPhotosByProject(proj.id));
       const found = photos.find(p => p.id === Number(req.params.id));
       if (found) { targetPhoto = found; break; }
     }
     if (!targetPhoto) return res.status(404).json({ error: "Photo not found" });
-    const filePath = path.join(uploadsDir, targetPhoto.filename);
-    const { description, damageLevel } = await analyzePhotoWithAI(filePath, targetPhoto.tag || "general");
-    const updated = storage.updatePhoto(targetPhoto.id, {
+    const { data: stored, error } = await requestDatabase().from("photos").select("url").eq("id", targetPhoto.id).single();
+    if (error) throw error;
+    const bytes = await downloadCompanyFile(stored.url);
+    const { description, damageLevel } = await analyzePhotoWithAI(bytes, targetPhoto.tag || "general", targetPhoto.mimeType);
+    const updated = (await storage.updatePhoto(targetPhoto.id, {
       aiDescription: description, aiDamageLevel: damageLevel, aiAnalyzed: true,
-    });
+    }));
     res.json(updated);
   });
 
   // Generate inspection report for a project
-  app.get("/api/projects/:id/report", (req, res) => {
-    const proj = storage.getProject(Number(req.params.id));
+  app.get("/api/projects/:id/report", async (req, res) => {
+    const proj = (await storage.getProject(Number(req.params.id)));
     if (!proj) return res.status(404).json({ error: "Not found" });
-    const projectPhotos = storage.getPhotosByProject(proj.id);
+    const projectPhotos = (await storage.getPhotosByProject(proj.id));
     const damagePhotos = projectPhotos.filter(p => p.aiDamageLevel && p.aiDamageLevel !== "none");
     const severityCount = { minor: 0, moderate: 0, severe: 0, unknown: 0 };
     damagePhotos.forEach(p => {
@@ -630,19 +597,19 @@ export function registerRoutes(httpServer: Server, app: Express): void {
       photos: projectPhotos,
       generatedAt: new Date().toISOString(),
       companyName: "CW Roofing & Construction, LLC",
-      companyPhone: storage.getSetting("company_phone") || "(832) 555-0100",
-      companyEmail: storage.getSetting("company_email") || "info@cwroofingservices.com",
+      companyPhone: (await storage.getSetting("company_phone")) || "(832) 555-0100",
+      companyEmail: (await storage.getSetting("company_email")) || "info@cwroofingservices.com",
     });
   });
 
   // ─── EMAIL LOGS ───────────────────────────────────────────────────────────
-  app.get("/api/emails", (req, res) => res.json(storage.getEmailLogs()));
-  app.get("/api/leads/:leadId/emails", (req, res) => {
-    res.json(storage.getEmailLogsByLead(Number(req.params.leadId)));
+  app.get("/api/emails", async (req, res) => res.json((await storage.getEmailLogs())));
+  app.get("/api/leads/:leadId/emails", async (req, res) => {
+    res.json((await storage.getEmailLogsByLead(Number(req.params.leadId))));
   });
   app.post("/api/emails/send", async (req, res) => {
     const { leadId, type, customSubject, customBody } = req.body;
-    const lead = storage.getLead(Number(leadId));
+    const lead = (await storage.getLead(Number(leadId)));
     if (!lead) return res.status(404).json({ error: "Lead not found" });
 
     const templates: Record<string, { subject: string; body: string }> = {
@@ -665,20 +632,20 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     };
 
     const template = templates[type] || { subject: customSubject || "Message from CW Roofing", body: customBody || "" };
-    const emailLog = storage.createEmailLog({
+    const emailLog = (await storage.createEmailLog({
       leadId: lead.id,
       toEmail: lead.email,
       subject: template.subject,
       body: template.body,
       type: type || "custom",
-      status: "sent",
-      sentAt: new Date().toISOString(),
-    });
+      status: "pending",
+      sentAt: null,
+    }));
     res.json({ success: true, emailLog, note: "Email logged. Connect SMTP/SendGrid in Settings to actually send emails." });
   });
 
   // ─── STANDALONE MEASUREMENTS ─────────────────────────────────────────────────
-  app.get("/api/measurements", (req, res) => res.json(storage.getMeasurements()));
+  app.get("/api/measurements", async (req, res) => res.json((await storage.getMeasurements())));
 
   app.post("/api/measurements", async (req, res) => {
     const { address, notes, linkLeadAutomatically } = req.body;
@@ -733,43 +700,43 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     let linkedLeadId: number | undefined;
     let linkedLead: any = null;
     if (linkLeadAutomatically !== false) {
-      const matched = storage.findLeadByAddress(address);
+      const matched = (await storage.findLeadByAddress(address));
       if (matched) {
         linkedLeadId = matched.id;
         linkedLead = matched;
       }
     }
 
-    const measurement = storage.createMeasurement({
+    const measurement = (await storage.createMeasurement({
       address,
       lat: coords ? coords.lat : undefined,
       lng: coords ? coords.lng : undefined,
       notes,
       linkedLeadId,
       ...measureResult,
-    });
+    }));
 
     res.json({ measurement, linkedLead, source: measureResult.source });
   });
 
-  app.patch("/api/measurements/:id", (req, res) => {
-    const m = storage.updateMeasurement(Number(req.params.id), req.body);
+  app.patch("/api/measurements/:id", async (req, res) => {
+    const m = (await storage.updateMeasurement(Number(req.params.id), req.body));
     if (!m) return res.status(404).json({ error: "Not found" });
     res.json(m);
   });
 
-  app.delete("/api/measurements/:id", (req, res) => {
-    storage.deleteMeasurement(Number(req.params.id));
+  app.delete("/api/measurements/:id", async (req, res) => {
+    (await storage.deleteMeasurement(Number(req.params.id)));
     res.json({ success: true });
   });
 
   // ─── DASHBOARD STATS ──────────────────────────────────────────────────────
-  app.get("/api/stats", (req, res) => {
-    const allLeads = storage.getLeads();
-    const allJobs = storage.getJobs();
-    const allEstimates = storage.getEstimates();
-    const allAlerts = storage.getStormAlerts();
-    const allProjects = storage.getProjects();
+  app.get("/api/stats", async (req, res) => {
+    const allLeads = (await storage.getLeads());
+    const allJobs = (await storage.getJobs());
+    const allEstimates = (await storage.getEstimates());
+    const allAlerts = (await storage.getStormAlerts());
+    const allProjects = (await storage.getProjects());
 
     const revenue = allJobs
       .filter(j => j.status === "paid" || j.status === "complete")
@@ -803,35 +770,35 @@ export function registerRoutes(httpServer: Server, app: Express): void {
 
   // ─── PUBLIC CONFIG (safe to expose) ─────────────────────────────────────
   // Artemis provider status
-  app.get("/api/config/artemis-status", (_req, res) => {
-    const key = storage.getSetting("artemis_api_key");
+  app.get("/api/config/artemis-status", async (_req, res) => {
+    const key = (await storage.getSetting("artemis_api_key"));
     res.json({ configured: !!key, provider: key ? "artemis" : "google-solar" });
   });
 
-    app.get("/api/config/maps-key", (req, res) => {
-    const key = storage.getSetting("google_maps_api_key");
+    app.get("/api/config/maps-key", async (req, res) => {
+    const key = (await storage.getSetting("google_maps_api_key"));
     res.json({ key: key || null });
   });
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
-  app.get("/api/settings", (req, res) => {
+  app.get("/api/settings", async (req, res) => {
     const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key"];
-    const settings = storage.getAllSettings().map((s: any) =>
+    const settings = (await storage.getAllSettings()).map((s: any) =>
       SENSITIVE.includes(s.key) && s.value ? { ...s, value: "***" } : s
     );
     res.json(settings);
   });
-  app.post("/api/settings", (req, res) => {
+  app.post("/api/settings", async (req, res) => {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ error: "Key required" });
-    storage.setSetting(key, value);
+    (await storage.setSetting(key, value));
     res.json({ success: true });
   });
 
   // Per-lead sub-routes: measurements, insurance claims, contracts, payments, documents
-  app.get("/api/leads/:leadId/measurements", (req, res) => {
+  app.get("/api/leads/:leadId/measurements", async (req, res) => {
     const leadId = Number(req.params.leadId);
-    const all = storage.getMeasurements();
+    const all = (await storage.getMeasurements());
     res.json(all.filter((m: any) => m.linkedLeadId === leadId));
   });
 
@@ -853,14 +820,14 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         rawText = fileBuffer.toString("utf8");
       } else {
         // PDF report
-        const pdfData = await pdfParse(fileBuffer);
-        rawText = pdfData.text;
+        const parser = new PDFParse({ data: fileBuffer });
+        try { rawText = (await parser.getText()).text; } finally { await parser.destroy(); }
       }
 
       let extracted: any = { source: "uploaded-report", rawText };
 
       // 2. Try AI extraction first (most accurate for any report format)
-      const openaiKey = storage.getSetting("openai_api_key");
+      const openaiKey = (await storage.getSetting("openai_api_key"));
       if (openaiKey) {
         try {
           const { default: OpenAI } = await import("openai");
@@ -955,7 +922,7 @@ ${rawText.slice(0, 8000)}`;
       }
       if (!extracted.address) {
         // Try to pull address from lead record
-        const lead = storage.getLead(leadId);
+        const lead = (await storage.getLead(leadId));
         if (lead) extracted.address = `${lead.address}, ${lead.city} ${lead.zip}`;
       }
       if (!extracted.provider) {
@@ -970,13 +937,13 @@ ${rawText.slice(0, 8000)}`;
       }
 
       // 4. Save as a measurement linked to this lead
-      const lead = storage.getLead(leadId);
+      const lead = (await storage.getLead(leadId));
       const address = extracted.address || (lead ? `${lead.address}, ${lead.city} ${lead.zip}` : "Unknown");
 
       // Also save the PDF as a document attached to this lead
-      const docUrl = req.file.path ? `/uploads/${req.file.filename}` : null;
+      const docUrl = await uploadCompanyFile(req.file);
       if (docUrl) {
-        storage.createDocument({
+        (await storage.createDocument({
           leadId,
           filename: req.file.filename,
           originalName: req.file.originalname,
@@ -985,10 +952,10 @@ ${rawText.slice(0, 8000)}`;
           url: docUrl,
           docType: "adjuster-report",
           notes: `${extracted.provider} measurement report — auto-attached`,
-        });
+        }));
       }
 
-      const measurement = storage.createMeasurement({
+      const measurement = (await storage.createMeasurement({
         address,
         linkedLeadId: leadId,
         squares: extracted.squares || null,
@@ -1003,9 +970,9 @@ ${rawText.slice(0, 8000)}`;
         source: "uploaded-report",
         rawData: JSON.stringify({ provider: extracted.provider, reportId: extracted.reportId, reportDate: extracted.reportDate }),
         notes: `Parsed from ${extracted.provider} PDF report`,
-        lat: lead?.lat || null,
-        lng: lead?.lng || null,
-      });
+        lat: null,
+        lng: null,
+      }));
 
       res.json({
         measurement,
@@ -1028,163 +995,163 @@ ${rawText.slice(0, 8000)}`;
       res.status(500).json({ error: err.message || "Failed to parse PDF" });
     }
   });
-  app.get("/api/leads/:leadId/insurance-claims", (req, res) => {
-    res.json(storage.getInsuranceClaimsByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/insurance-claims", async (req, res) => {
+    res.json((await storage.getInsuranceClaimsByLead(Number(req.params.leadId))));
   });
-  app.get("/api/leads/:leadId/contracts", (req, res) => {
-    res.json(storage.getContractsByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/contracts", async (req, res) => {
+    res.json((await storage.getContractsByLead(Number(req.params.leadId))));
   });
-  app.get("/api/leads/:leadId/payments", (req, res) => {
-    res.json(storage.getPaymentsByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/payments", async (req, res) => {
+    res.json((await storage.getPaymentsByLead(Number(req.params.leadId))));
   });
-  app.get("/api/leads/:leadId/documents", (req, res) => {
-    res.json(storage.getDocumentsByLead(Number(req.params.leadId)));
+  app.get("/api/leads/:leadId/documents", async (req, res) => {
+    res.json((await storage.getDocumentsByLead(Number(req.params.leadId))));
   });
 
   // ─── INSURANCE CLAIMS ────────────────────────────────────────────────────────
-  app.get("/api/insurance-claims", (_req, res) => {
-    res.json(storage.getInsuranceClaims());
+  app.get("/api/insurance-claims", async (_req, res) => {
+    res.json((await storage.getInsuranceClaims()));
   });
-  app.get("/api/insurance-claims/:id", (req, res) => {
-    const claim = storage.getInsuranceClaim(Number(req.params.id));
+  app.get("/api/insurance-claims/:id", async (req, res) => {
+    const claim = (await storage.getInsuranceClaim(Number(req.params.id)));
     if (!claim) return res.status(404).json({ error: "Not found" });
     res.json(claim);
   });
-  app.post("/api/insurance-claims", (req, res) => {
+  app.post("/api/insurance-claims", async (req, res) => {
     try {
-      const claim = storage.createInsuranceClaim(req.body);
+      const claim = (await storage.createInsuranceClaim(req.body));
       res.status(201).json(claim);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/insurance-claims/:id", (req, res) => {
-    const claim = storage.updateInsuranceClaim(Number(req.params.id), req.body);
+  app.patch("/api/insurance-claims/:id", async (req, res) => {
+    const claim = (await storage.updateInsuranceClaim(Number(req.params.id), req.body));
     if (!claim) return res.status(404).json({ error: "Not found" });
     res.json(claim);
   });
-  app.delete("/api/insurance-claims/:id", (req, res) => {
-    const ok = storage.deleteInsuranceClaim(Number(req.params.id));
+  app.delete("/api/insurance-claims/:id", async (req, res) => {
+    const ok = (await storage.deleteInsuranceClaim(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── CONTRACTS ───────────────────────────────────────────────────────────────
-  app.get("/api/contracts", (_req, res) => {
-    res.json(storage.getContracts());
+  app.get("/api/contracts", async (_req, res) => {
+    res.json((await storage.getContracts()));
   });
-  app.get("/api/contracts/:id", (req, res) => {
-    const contract = storage.getContract(Number(req.params.id));
+  app.get("/api/contracts/:id", async (req, res) => {
+    const contract = (await storage.getContract(Number(req.params.id)));
     if (!contract) return res.status(404).json({ error: "Not found" });
     res.json(contract);
   });
-  app.post("/api/contracts", (req, res) => {
+  app.post("/api/contracts", async (req, res) => {
     try {
-      const contract = storage.createContract(req.body);
+      const contract = (await storage.createContract(req.body));
       res.status(201).json(contract);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/contracts/:id", (req, res) => {
-    const contract = storage.updateContract(Number(req.params.id), req.body);
+  app.patch("/api/contracts/:id", async (req, res) => {
+    const contract = (await storage.updateContract(Number(req.params.id), req.body));
     if (!contract) return res.status(404).json({ error: "Not found" });
     res.json(contract);
   });
-  app.delete("/api/contracts/:id", (req, res) => {
-    const ok = storage.deleteContract(Number(req.params.id));
+  app.delete("/api/contracts/:id", async (req, res) => {
+    const ok = (await storage.deleteContract(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── PAYMENTS ────────────────────────────────────────────────────────────────
-  app.get("/api/payments", (_req, res) => {
-    res.json(storage.getPayments());
+  app.get("/api/payments", async (_req, res) => {
+    res.json((await storage.getPayments()));
   });
-  app.post("/api/payments", (req, res) => {
+  app.post("/api/payments", async (req, res) => {
     try {
-      const payment = storage.createPayment(req.body);
+      const payment = (await storage.createPayment(req.body));
       res.status(201).json(payment);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/payments/:id", (req, res) => {
-    const payment = storage.updatePayment(Number(req.params.id), req.body);
+  app.patch("/api/payments/:id", async (req, res) => {
+    const payment = (await storage.updatePayment(Number(req.params.id), req.body));
     if (!payment) return res.status(404).json({ error: "Not found" });
     res.json(payment);
   });
-  app.delete("/api/payments/:id", (req, res) => {
-    const ok = storage.deletePayment(Number(req.params.id));
+  app.delete("/api/payments/:id", async (req, res) => {
+    const ok = (await storage.deletePayment(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── SUPPLEMENTS ─────────────────────────────────────────────────────────────
-  app.get("/api/supplements", (_req, res) => {
-    res.json(storage.getSupplements());
+  app.get("/api/supplements", async (_req, res) => {
+    res.json((await storage.getSupplements()));
   });
-  app.get("/api/supplements/:id", (req, res) => {
-    const s = storage.getSupplement(Number(req.params.id));
+  app.get("/api/supplements/:id", async (req, res) => {
+    const s = (await storage.getSupplement(Number(req.params.id)));
     if (!s) return res.status(404).json({ error: "Not found" });
     res.json(s);
   });
-  app.post("/api/supplements", (req, res) => {
+  app.post("/api/supplements", async (req, res) => {
     try {
-      const s = storage.createSupplement(req.body);
+      const s = (await storage.createSupplement(req.body));
       res.status(201).json(s);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/supplements/:id", (req, res) => {
-    const s = storage.updateSupplement(Number(req.params.id), req.body);
+  app.patch("/api/supplements/:id", async (req, res) => {
+    const s = (await storage.updateSupplement(Number(req.params.id), req.body));
     if (!s) return res.status(404).json({ error: "Not found" });
     res.json(s);
   });
-  app.delete("/api/supplements/:id", (req, res) => {
-    const ok = storage.deleteSupplement(Number(req.params.id));
+  app.delete("/api/supplements/:id", async (req, res) => {
+    const ok = (await storage.deleteSupplement(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── SUBCONTRACTORS ───────────────────────────────────────────────────────────
-  app.get("/api/subcontractors", (_req, res) => {
-    res.json(storage.getSubcontractors());
+  app.get("/api/subcontractors", async (_req, res) => {
+    res.json((await storage.getSubcontractors()));
   });
-  app.post("/api/subcontractors", (req, res) => {
+  app.post("/api/subcontractors", async (req, res) => {
     try {
-      const sub = storage.createSubcontractor(req.body);
+      const sub = (await storage.createSubcontractor(req.body));
       res.status(201).json(sub);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/subcontractors/:id", (req, res) => {
-    const sub = storage.updateSubcontractor(Number(req.params.id), req.body);
+  app.patch("/api/subcontractors/:id", async (req, res) => {
+    const sub = (await storage.updateSubcontractor(Number(req.params.id), req.body));
     if (!sub) return res.status(404).json({ error: "Not found" });
     res.json(sub);
   });
-  app.delete("/api/subcontractors/:id", (req, res) => {
-    const ok = storage.deleteSubcontractor(Number(req.params.id));
+  app.delete("/api/subcontractors/:id", async (req, res) => {
+    const ok = (await storage.deleteSubcontractor(Number(req.params.id)));
     res.json({ success: ok });
   });
-  app.get("/api/jobs/:jobId/assignments", (req, res) => {
-    res.json(storage.getAssignmentsByJob(Number(req.params.jobId)));
+  app.get("/api/jobs/:jobId/assignments", async (req, res) => {
+    res.json((await storage.getAssignmentsByJob(Number(req.params.jobId))));
   });
-  app.post("/api/assignments", (req, res) => {
+  app.post("/api/assignments", async (req, res) => {
     try {
-      const a = storage.createAssignment(req.body);
+      const a = (await storage.createAssignment(req.body));
       res.status(201).json(a);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/assignments/:id", (req, res) => {
-    const a = storage.updateAssignment(Number(req.params.id), req.body);
+  app.patch("/api/assignments/:id", async (req, res) => {
+    const a = (await storage.updateAssignment(Number(req.params.id), req.body));
     if (!a) return res.status(404).json({ error: "Not found" });
     res.json(a);
   });
-  app.delete("/api/assignments/:id", (req, res) => {
-    const ok = storage.deleteAssignment(Number(req.params.id));
+  app.delete("/api/assignments/:id", async (req, res) => {
+    const ok = (await storage.deleteAssignment(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── DOCUMENTS ───────────────────────────────────────────────────────────────
-  app.get("/api/documents", (req, res) => {
-    if (req.query.leadId) return res.json(storage.getDocumentsByLead(Number(req.query.leadId)));
-    if (req.query.jobId) return res.json(storage.getDocumentsByJob(Number(req.query.jobId)));
-    res.json(storage.getDocuments());
+  app.get("/api/documents", async (req, res) => {
+    if (req.query.leadId) return res.json((await storage.getDocumentsByLead(Number(req.query.leadId))));
+    if (req.query.jobId) return res.json((await storage.getDocumentsByJob(Number(req.query.jobId))));
+    res.json((await storage.getDocuments()));
   });
   app.post("/api/documents/upload", uploadDoc.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "No file" });
-      const url = `/uploads/${req.file.filename}`;
-      const doc = storage.createDocument({
+      const url = await uploadCompanyFile(req.file);
+      const doc = (await storage.createDocument({
         filename: req.file.filename,
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
@@ -1194,52 +1161,52 @@ ${rawText.slice(0, 8000)}`;
         jobId: req.body.jobId ? Number(req.body.jobId) : undefined,
         docType: req.body.docType || "other",
         notes: req.body.notes,
-      });
+      }));
       res.status(201).json(doc);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.delete("/api/documents/:id", (req, res) => {
-    const ok = storage.deleteDocument(Number(req.params.id));
+  app.delete("/api/documents/:id", async (req, res) => {
+    const ok = (await storage.deleteDocument(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── REFERRAL SOURCES ────────────────────────────────────────────────────────
-  app.get("/api/referral-sources", (_req, res) => {
-    res.json(storage.getReferralSources());
+  app.get("/api/referral-sources", async (_req, res) => {
+    res.json((await storage.getReferralSources()));
   });
-  app.post("/api/referral-sources", (req, res) => {
+  app.post("/api/referral-sources", async (req, res) => {
     try {
-      const r = storage.createReferralSource(req.body);
+      const r = (await storage.createReferralSource(req.body));
       res.status(201).json(r);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/referral-sources/:id", (req, res) => {
-    const r = storage.updateReferralSource(Number(req.params.id), req.body);
+  app.patch("/api/referral-sources/:id", async (req, res) => {
+    const r = (await storage.updateReferralSource(Number(req.params.id), req.body));
     if (!r) return res.status(404).json({ error: "Not found" });
     res.json(r);
   });
-  app.delete("/api/referral-sources/:id", (req, res) => {
-    const ok = storage.deleteReferralSource(Number(req.params.id));
+  app.delete("/api/referral-sources/:id", async (req, res) => {
+    const ok = (await storage.deleteReferralSource(Number(req.params.id)));
     res.json({ success: ok });
   });
 
   // ─── COMMISSIONS ─────────────────────────────────────────────────────────────
-  app.get("/api/commissions", (_req, res) => {
-    res.json(storage.getCommissions());
+  app.get("/api/commissions", async (_req, res) => {
+    res.json((await storage.getCommissions()));
   });
-  app.post("/api/commissions", (req, res) => {
+  app.post("/api/commissions", async (req, res) => {
     try {
-      const c = storage.createCommission(req.body);
+      const c = (await storage.createCommission(req.body));
       res.status(201).json(c);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
-  app.patch("/api/commissions/:id", (req, res) => {
-    const c = storage.updateCommission(Number(req.params.id), req.body);
+  app.patch("/api/commissions/:id", async (req, res) => {
+    const c = (await storage.updateCommission(Number(req.params.id), req.body));
     if (!c) return res.status(404).json({ error: "Not found" });
     res.json(c);
   });
-  app.delete("/api/commissions/:id", (req, res) => {
-    const ok = storage.deleteCommission(Number(req.params.id));
+  app.delete("/api/commissions/:id", async (req, res) => {
+    const ok = (await storage.deleteCommission(Number(req.params.id)));
     res.json({ success: ok });
   });
 }

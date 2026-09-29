@@ -1,3 +1,5 @@
+import AuthGate from "@/components/AuthGate";
+import { getAuthClient } from "@/lib/auth";
 import { Switch, Route, Router, Link, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import cwLogoSrc from "@assets/cw-logo.png";
@@ -136,7 +138,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       <div className="flex-1" />
       <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-muted)" }}>
         <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-green)" }} />
-        System Online
+        <button onClick={async () => { queryClient.clear(); await (await getAuthClient()).auth.signOut(); }}>Sign out</button>
       </div>
     </header>
   );
@@ -146,8 +148,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthGate>
       <Router hook={useHashLocation}>
-        {/* Public portal route — no sidebar/nav */}
+        {/* Estimate preview requires staff sign-in until scoped customer sharing is implemented. */}
         <Route path="/portal/:id" component={EstimatePortal} />
 
         {/* Main app shell */}
@@ -188,6 +191,7 @@ export default function App() {
         </Route>
         <Toaster />
       </Router>
+    </AuthGate>
     </QueryClientProvider>
   );
 }

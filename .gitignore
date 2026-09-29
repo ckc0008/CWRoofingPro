@@ -1,7 +1,9 @@
 node_modules/
 .vite/
+data.db
+uploads/
 
-# SQLite WAL/journal files only — data.db is included so sandbox has seed data
+# Legacy SQLite files are excluded from source control
 data.db-shm
 data.db-wal
 data.db-journal
@@ -12,3 +14,7 @@ data.db-journal
 
 *.log
 .DS_Store
+
+backups/
+supabase/.temp/
+dist/
