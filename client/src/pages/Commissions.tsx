@@ -331,7 +331,7 @@ export default function Commissions() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>COMMISSION TRACKER</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>COMMISSION TRACKER</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Track sales rep commissions and payouts</p>
         </div>
         <Button
@@ -462,7 +462,7 @@ export default function Commissions() {
       {/* Sales Rep Summary */}
       {Object.keys(repSummary).length > 0 && (
         <div className="section-panel p-5">
-          <div className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>SALES REP SUMMARY</div>
+          <div className="font-display font-bold text-foreground mb-4" style={{ fontSize: 14 }}>SALES REP SUMMARY</div>
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>

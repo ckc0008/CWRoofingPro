@@ -15,7 +15,7 @@ function SettingGroup({ title, icon: Icon, color, children }: any) {
           style={{ background: `${color}22`, color }}>
           <Icon size={18} />
         </div>
-        <h3 className="font-display font-bold text-white" style={{ fontSize: 16 }}>{title}</h3>
+        <h3 className="font-display font-bold text-foreground" style={{ fontSize: 16 }}>{title}</h3>
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -79,7 +79,7 @@ export default function Settings() {
   return (
     <div className="space-y-5 max-w-3xl">
       <div>
-        <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>SETTINGS</h1>
+        <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>SETTINGS</h1>
         <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Configure API keys, integrations, and company details</p>
       </div>
 

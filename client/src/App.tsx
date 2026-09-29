@@ -1,3 +1,5 @@
+import { ThemeProvider } from "next-themes";
+import ThemeToggle from "@/components/ThemeToggle";
 import AuthGate from "@/components/AuthGate";
 import { getAuthClient } from "@/lib/auth";
 import { Switch, Route, Router, Link, useLocation } from "wouter";
@@ -136,6 +138,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
         <Menu size={20} />
       </button>
       <div className="flex-1" />
+      <ThemeToggle />
       <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-muted)" }}>
         <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-green)" }} />
         <button onClick={async () => { queryClient.clear(); await (await getAuthClient()).auth.signOut(); }}>Sign out</button>
@@ -147,6 +150,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="cw-roofing-theme" disableTransitionOnChange>
     <QueryClientProvider client={queryClient}>
       <AuthGate>
       <Router hook={useHashLocation}>
@@ -193,5 +197,6 @@ export default function App() {
       </Router>
     </AuthGate>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }

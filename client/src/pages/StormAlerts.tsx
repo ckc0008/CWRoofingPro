@@ -179,7 +179,7 @@ export default function StormAlerts() {
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>STORM ALERTS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>STORM ALERTS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Track storms and notify customers in affected areas</p>
         </div>
         <div className="flex gap-3">
@@ -200,7 +200,7 @@ export default function StormAlerts() {
       {/* Live NOAA Alerts */}
       {liveAlerts.length > 0 && (
         <div className="section-panel p-5">
-          <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 15 }}>
+          <h3 className="font-display font-bold text-foreground mb-4" style={{ fontSize: 15 }}>
             LIVE NOAA ALERTS — TEXAS
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -224,7 +224,7 @@ export default function StormAlerts() {
       {/* Logged Alerts */}
       <div className="section-panel overflow-hidden">
         <div className="p-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <span className="font-display font-bold text-white" style={{ fontSize: 15 }}>LOGGED STORM EVENTS</span>
+          <span className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>LOGGED STORM EVENTS</span>
           <span style={{ fontSize: 12, color: "var(--color-muted)" }}>{alerts.length} events</span>
         </div>
         {isLoading ? (
@@ -251,7 +251,7 @@ export default function StormAlerts() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span className="font-display font-bold text-white" style={{ fontSize: 15 }}>
+                        <span className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>
                           {alert.stormType.toUpperCase()} EVENT
                         </span>
                         <span className="cw-badge" style={{ color: sColor, background: `${sColor}20` }}>

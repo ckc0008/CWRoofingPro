@@ -41,6 +41,39 @@
     --font-body: 'Inter', system-ui, sans-serif;
   }
 
+  :root.light {
+    color-scheme: light;
+    --background: 210 25% 97%;
+    --foreground: 220 25% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 15%;
+    --primary: 88 85% 35%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 210 20% 93%;
+    --secondary-foreground: 220 25% 20%;
+    --muted: 210 20% 93%;
+    --muted-foreground: 215 15% 40%;
+    --accent: 88 65% 91%;
+    --accent-foreground: 88 85% 20%;
+    --border: 215 18% 83%;
+    --input: 215 18% 83%;
+    --ring: 88 85% 30%;
+    --color-bg: #f5f7fa;
+    --color-surface: #ffffff;
+    --color-surface-2: #edf1f5;
+    --color-border: #cdd5df;
+    --color-text: #1c2533;
+    --color-muted: #526175;
+    --color-green: #438b00;
+    --color-green-dark: #347000;
+    --color-green-light: #5aab0a;
+    --color-green-dim: rgba(80, 150, 15, 0.10);
+  }
+
+  :root.dark { color-scheme: dark; }
+
   * {
     box-sizing: border-box;
     margin: 0;

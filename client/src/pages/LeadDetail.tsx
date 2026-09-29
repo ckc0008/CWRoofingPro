@@ -21,7 +21,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   return (
     <div className="section-panel p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display font-bold text-white" style={{ fontSize: 15 }}>{title}</h3>
+        <h3 className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -323,7 +323,7 @@ export default function LeadDetail() {
             {lead.firstName[0]}{lead.lastName[0]}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-white" style={{ fontSize: 24 }}>
+            <h1 className="font-display font-bold text-foreground" style={{ fontSize: 24 }}>
               {lead.firstName.toUpperCase()} {lead.lastName.toUpperCase()}
             </h1>
             <div className="flex flex-wrap items-center gap-4 mt-1">

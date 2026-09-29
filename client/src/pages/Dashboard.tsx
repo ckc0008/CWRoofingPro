@@ -37,7 +37,7 @@ function PipelineBar({ data }: { data: Record<string, number> }) {
   const total = Object.values(data).reduce((s, v) => s + v, 0) || 1;
   return (
     <div className="section-panel p-5">
-      <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 16 }}>LEAD PIPELINE</h3>
+      <h3 className="font-display font-bold text-foreground mb-4" style={{ fontSize: 16 }}>LEAD PIPELINE</h3>
       <div className="flex rounded-full overflow-hidden h-3 mb-4" style={{ background: "var(--color-border)" }}>
         {stages.map(s => {
           const pct = ((data[s.key] || 0) / total) * 100;
@@ -84,7 +84,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 28 }}>COMMAND CENTER</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 28 }}>COMMAND CENTER</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 2 }}>
             CW Roofing & Construction — {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
@@ -121,7 +121,7 @@ export default function Dashboard() {
         {/* Recent Leads */}
         <div className="section-panel p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-bold text-white" style={{ fontSize: 16 }}>RECENT LEADS</h3>
+            <h3 className="font-display font-bold text-foreground" style={{ fontSize: 16 }}>RECENT LEADS</h3>
             <Link href="/crm">
               <a style={{ fontSize: 12, color: "var(--color-green)" }}>View all →</a>
             </Link>
@@ -161,7 +161,7 @@ export default function Dashboard() {
       {recentAlerts.length > 0 && (
         <div className="section-panel p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-bold text-white flex items-center gap-2" style={{ fontSize: 16 }}>
+            <h3 className="font-display font-bold text-foreground flex items-center gap-2" style={{ fontSize: 16 }}>
               <CloudLightning size={16} style={{ color: "#f43f5e" }} />
               ACTIVE STORM ALERTS
             </h3>

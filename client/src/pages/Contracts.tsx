@@ -345,7 +345,7 @@ function ContractDetailDialog({
       {/* Contract Body */}
       <div style={{ background: "rgba(92,191,0,0.04)", border: "1px solid rgba(92,191,0,0.15)", borderRadius: 8, padding: 16 }}>
         <div className="flex items-center justify-between mb-3">
-          <div className="font-display font-bold text-white" style={{ fontSize: 13 }}>CONTRACT BODY</div>
+          <div className="font-display font-bold text-foreground" style={{ fontSize: 13 }}>CONTRACT BODY</div>
           <Button variant="outline" onClick={() => setBody(CONTRACT_TEMPLATE)}
             className="flex items-center gap-1.5"
             style={{ borderColor: "var(--color-border)", color: "var(--color-muted)", background: "transparent", fontSize: 11 }}>
@@ -360,7 +360,7 @@ function ContractDetailDialog({
 
       {/* E-Signature Section */}
       <div style={{ background: "rgba(14,165,233,0.04)", border: "1px solid rgba(14,165,233,0.15)", borderRadius: 8, padding: 16 }}>
-        <div className="font-display font-bold text-white mb-3" style={{ fontSize: 13 }}>E-SIGNATURE</div>
+        <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 13 }}>E-SIGNATURE</div>
         {signatureData ? (
           <div className="space-y-3">
             <div style={{ fontSize: 12, color: "#22c55e" }}>✓ Contract signed</div>
@@ -566,7 +566,7 @@ export default function Contracts() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>CONTRACTS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>CONTRACTS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Digital contracts with e-signature</p>
         </div>
         <Button onClick={() => setShowNew(true)}

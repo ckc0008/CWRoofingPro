@@ -213,7 +213,7 @@ export default function CRM() {
     <div className="space-y-5 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>CRM — LEADS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>CRM — LEADS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>{leads.length} total contacts</p>
         </div>
         <Button data-testid="button-new-lead" onClick={() => setShowForm(true)}

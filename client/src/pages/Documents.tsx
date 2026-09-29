@@ -223,7 +223,7 @@ export default function Documents() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>DOCUMENT STORAGE</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>DOCUMENT STORAGE</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Upload and manage job documents</p>
         </div>
         <Button

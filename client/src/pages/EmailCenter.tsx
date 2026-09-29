@@ -19,7 +19,7 @@ export default function EmailCenter() {
   return (
     <div className="space-y-5 max-w-5xl">
       <div>
-        <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>EMAIL CENTER</h1>
+        <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>EMAIL CENTER</h1>
         <p style={{ fontSize: 13, color: "var(--color-muted)" }}>All automated and manual email communications</p>
       </div>
 
@@ -48,7 +48,7 @@ export default function EmailCenter() {
       {/* Email Log */}
       <div className="section-panel overflow-hidden">
         <div className="p-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <span className="font-display font-bold text-white" style={{ fontSize: 15 }}>EMAIL LOG</span>
+          <span className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>EMAIL LOG</span>
         </div>
         {isLoading ? (
           <div className="p-8 text-center" style={{ color: "var(--color-muted)" }}>Loading...</div>

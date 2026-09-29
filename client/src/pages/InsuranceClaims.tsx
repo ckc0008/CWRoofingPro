@@ -330,7 +330,7 @@ export default function InsuranceClaims() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>INSURANCE CLAIMS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>INSURANCE CLAIMS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Track and manage all insurance claims</p>
         </div>
         <Button onClick={() => { setForm({ ...EMPTY_FORM }); setShowNew(true); }}

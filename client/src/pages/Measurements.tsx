@@ -170,7 +170,7 @@ export default function Measurements() {
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
       <div>
-        <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>ROOF MEASUREMENTS</h1>
+        <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>ROOF MEASUREMENTS</h1>
         <p style={{ fontSize: 13, color: "var(--color-muted)" }}>
           Pull satellite measurements for any address — no estimate required. Results are saved to your history and auto-linked to matching leads.
         </p>
@@ -196,7 +196,7 @@ export default function Measurements() {
 
       {/* Measurement Input */}
       <div className="section-panel p-6">
-        <h3 className="font-display font-bold text-white mb-4" style={{ fontSize: 16 }}>
+        <h3 className="font-display font-bold text-foreground mb-4" style={{ fontSize: 16 }}>
           MEASURE A ROOF
         </h3>
         <form onSubmit={handleMeasure} className="space-y-4">
@@ -244,7 +244,7 @@ export default function Measurements() {
         {lastResult && (
           <div className="mt-5 p-5 rounded-xl" style={{ background: "rgba(92,191,0,0.07)", border: "1px solid rgba(92,191,0,0.25)" }}>
             <div className="flex items-center justify-between mb-4">
-              <span className="font-display font-bold text-white" style={{ fontSize: 15 }}>MEASUREMENT RESULT</span>
+              <span className="font-display font-bold text-foreground" style={{ fontSize: 15 }}>MEASUREMENT RESULT</span>
               <span className="cw-badge" style={{
                 color: SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099",
                 background: `${SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099"}20`
@@ -321,7 +321,7 @@ export default function Measurements() {
       {/* History */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-bold text-white" style={{ fontSize: 18 }}>
+          <h2 className="font-display font-bold text-foreground" style={{ fontSize: 18 }}>
             MEASUREMENT HISTORY ({measurements.length})
           </h2>
         </div>

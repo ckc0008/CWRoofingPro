@@ -329,7 +329,7 @@ export default function Jobs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>JOBS & SCHEDULING</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>JOBS & SCHEDULING</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Manage roofing jobs and crew scheduling</p>
         </div>
         <Button onClick={() => { setForm({ ...EMPTY_FORM }); setShowNew(true); }}

@@ -86,14 +86,14 @@ export default function MaterialOrders() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>MATERIAL ORDERS</h1>
+          <h1 className="font-display font-bold text-foreground" style={{ fontSize: 26 }}>MATERIAL ORDERS</h1>
           <p style={{ fontSize: 13, color: "var(--color-muted)" }}>Generate material order sheets from your estimates</p>
         </div>
       </div>
 
       {/* Estimate Selector */}
       <div className="section-panel p-5">
-        <div className="font-display font-bold text-white mb-3" style={{ fontSize: 14 }}>SELECT ESTIMATE</div>
+        <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 14 }}>SELECT ESTIMATE</div>
         {loadingEst ? (
           <div style={{ color: "var(--color-muted)", fontSize: 13 }}>Loading estimates...</div>
         ) : estimates.length === 0 ? (
@@ -182,7 +182,7 @@ export default function MaterialOrders() {
 
           {/* Measurements */}
           <div>
-            <div className="font-display font-bold text-white mb-3" style={{ fontSize: 13 }}>ROOF MEASUREMENTS</div>
+            <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 13 }}>ROOF MEASUREMENTS</div>
             <div className="grid grid-cols-3 gap-4">
               {[
                 { label: "SQUARES", value: selectedEst.roofSquares || "—" },
@@ -203,7 +203,7 @@ export default function MaterialOrders() {
 
           {/* Materials List */}
           <div>
-            <div className="font-display font-bold text-white mb-3" style={{ fontSize: 13 }}>MATERIALS LIST</div>
+            <div className="font-display font-bold text-foreground mb-3" style={{ fontSize: 13 }}>MATERIALS LIST</div>
             <div className="overflow-x-auto">
               <table className="data-table">
                 <thead>
@@ -252,7 +252,7 @@ export default function MaterialOrders() {
 
           {/* Notes */}
           <div>
-            <div className="font-display font-bold text-white mb-2" style={{ fontSize: 13 }}>ORDER NOTES</div>
+            <div className="font-display font-bold text-foreground mb-2" style={{ fontSize: 13 }}>ORDER NOTES</div>
             <textarea
               value={printNotes}
               onChange={e => setPrintNotes(e.target.value)}
@@ -282,7 +282,7 @@ export default function MaterialOrders() {
       {/* Recent Estimates Quick Access */}
       {!selectedEst && sortedEstimates.length > 0 && (
         <div className="section-panel p-5">
-          <div className="font-display font-bold text-white mb-4" style={{ fontSize: 14 }}>RECENT ESTIMATES</div>
+          <div className="font-display font-bold text-foreground mb-4" style={{ fontSize: 14 }}>RECENT ESTIMATES</div>
           <div className="space-y-2">
             {sortedEstimates.slice(0, 6).map((e: any) => {
               const lead = leadMap[e.leadId];
