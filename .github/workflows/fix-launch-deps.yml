@@ -20,7 +20,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-      - run: npm audit fix --package-lock-only
+      - run: npm audit fix --package-lock-only || true
       - name: Commit lockfile fixes
         run: |
           if git diff --quiet -- package.json package-lock.json; then
