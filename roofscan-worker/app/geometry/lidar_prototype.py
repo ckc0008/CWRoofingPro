@@ -10,6 +10,7 @@ from shapely.geometry import shape
 from shapely.ops import transform as transform_geom
 from shapely import contains_xy
 from app.geometry.planes import segment_roof_planes
+from app.geometry.topology import derive_candidate_edges
 
 CACHE_DIR = Path(os.getenv('ROOFSCAN_LIDAR_CACHE', '/tmp/roofscan-lidar'))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -76,6 +77,13 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         raise ValueError('No stable roof planes could be segmented from LiDAR points')
 
     dominant = planes[0]
+    candidate_edges = derive_candidate_edges(
+        bx,
+        by,
+        planes,
+        adjacency_tolerance=1.0,
+        min_edge_length=0.75,
+    )
     public_planes = [
         {key: value for key, value in plane.items() if key != 'sourceIndices'}
         for plane in planes
@@ -88,6 +96,7 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         'pointCount': int(len(bz)),
         'planeCount': len(public_planes),
         'planes': public_planes,
+        'candidateEdges': candidate_edges,
         'sourceCrs': source_crs.to_string(),
         'classification6Used': bool(building_mask.sum() >= 100),
     }
