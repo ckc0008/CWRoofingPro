@@ -22,6 +22,7 @@ export interface RoofMeasurementResult {
   reportUrl?: string | null;
   reportId?: string | null;
   imageryDate?: string | null;
+  providerMetadata?: string | null;
   rawData?: string | null;
 }
 
