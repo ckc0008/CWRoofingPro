@@ -7,17 +7,21 @@ export function createCwOpenDataProvider(getSetting: SettingGetter): RoofMeasure
     id: "cw-open-data",
 
     isConfigured() {
-      return Boolean(getSetting("roofscan_worker_url"));
+      return Boolean(getSetting("roofscan_worker_url") && getSetting("roofscan_worker_token"));
     },
 
     async measure(request: RoofMeasurementRequest): Promise<RoofMeasurementResult | null> {
       const workerUrl = getSetting("roofscan_worker_url")?.replace(/\/$/, "");
-      if (!workerUrl || !Number.isFinite(request.lat) || !Number.isFinite(request.lng)) return null;
+      const workerToken = getSetting("roofscan_worker_token");
+      if (!workerUrl || !workerToken || !Number.isFinite(request.lat) || !Number.isFinite(request.lng)) return null;
 
       try {
         const response = await fetch(workerUrl + "/v1/measure", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + workerToken,
+          },
           body: JSON.stringify({
             address: request.address,
             lat: request.lat,
