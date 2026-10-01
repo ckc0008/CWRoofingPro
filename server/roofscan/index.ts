@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { createArtemisProvider } from "./providers/artemis";
+import { createCwOpenDataProvider } from "./providers/cwOpenData";
 import {
   RoofMeasurementUnavailableError,
   isUsableMeasurement,
@@ -8,6 +9,8 @@ import {
 } from "./types";
 
 const providers = [
+  // Prefer the CW-owned engine when it can verify its geometry.
+  createCwOpenDataProvider((key) => storage.getSetting(key)),
   createArtemisProvider((key) => storage.getSetting(key)),
 ];
 
