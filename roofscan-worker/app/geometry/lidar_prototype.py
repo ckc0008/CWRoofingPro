@@ -9,6 +9,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import shape
 from shapely.ops import transform as transform_geom
 from shapely import contains_xy
+from app.geometry.metrics import classify_exterior_edges, estimate_facet_areas
 from app.geometry.planes import segment_roof_planes
 from app.geometry.topology import derive_candidate_edges
 
@@ -84,6 +85,27 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         adjacency_tolerance=1.0,
         min_edge_length=0.75,
     )
+
+    horizontal_unit_to_meters = 1.0
+    if source_crs.axis_info:
+        horizontal_unit_to_meters = source_crs.axis_info[0].unit_conversion_factor or 1.0
+    unit_to_feet = horizontal_unit_to_meters * 3.280839895
+
+    facet_metrics = estimate_facet_areas(
+        local_footprint,
+        bx,
+        by,
+        planes,
+        unit_to_feet=unit_to_feet,
+    )
+    exterior_metrics = classify_exterior_edges(
+        local_footprint,
+        bx,
+        by,
+        planes,
+        unit_to_feet=unit_to_feet,
+    )
+
     public_planes = [
         {key: value for key, value in plane.items() if key != 'sourceIndices'}
         for plane in planes
@@ -97,6 +119,8 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         'planeCount': len(public_planes),
         'planes': public_planes,
         'candidateEdges': candidate_edges,
+        'facetMetrics': facet_metrics,
+        'exteriorMetrics': exterior_metrics,
         'sourceCrs': source_crs.to_string(),
         'classification6Used': bool(building_mask.sum() >= 100),
     }
