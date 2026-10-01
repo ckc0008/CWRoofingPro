@@ -28,7 +28,7 @@ Variables:
 DATABASE_PATH=/data/data.db
 UPLOADS_DIR=/data/uploads
 GOOGLE_MAPS_API_KEY=<CW Google Maps/Geocoding key>
-ROOFSCAN_WORKER_URL=http://${{roofscan-worker.RAILWAY_PRIVATE_DOMAIN}}:${{roofscan-worker.PORT}}
+ROOFSCAN_WORKER_URL=http://${{roofscan-worker.RAILWAY_PRIVATE_DOMAIN}}:8080
 ROOFSCAN_WORKER_TOKEN=${{shared.ROOFSCAN_API_TOKEN}}
 ```
 
