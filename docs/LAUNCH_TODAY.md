@@ -62,3 +62,7 @@ Verified customer measurements can come from configured commercial providers or 
 - no missing major facets, ridges or valleys
 
 Only after those gates are demonstrated on the benchmark set should the worker be permitted to emit `status: verified`.
+
+## Security audit gate
+
+Production dependencies must pass `npm audit --omit=dev` before launch. This branch exists to apply and validate non-breaking dependency fixes before deployment.
