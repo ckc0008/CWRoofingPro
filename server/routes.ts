@@ -269,21 +269,70 @@ async function getGoogleSolarData(lat: number, lng: number): Promise<any> {
   }
 }
 
-// Geocode address to lat/lng
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+type ResolvedAddress = {
+  fullAddress: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zip: string;
+  lat: number;
+  lng: number;
+};
+
+function parseGoogleAddressResult(result: any): ResolvedAddress | null {
+  const location = result?.geometry?.location;
+  if (!location || !Number.isFinite(location.lat) || !Number.isFinite(location.lng)) return null;
+
+  const components = result.address_components || [];
+  const getLong = (type: string) =>
+    components.find((component: any) => component.types?.includes(type))?.long_name || "";
+  const getShort = (type: string) =>
+    components.find((component: any) => component.types?.includes(type))?.short_name || "";
+
+  const streetAddress = [getLong("street_number"), getLong("route")].filter(Boolean).join(" ");
+  const city =
+    getLong("locality") ||
+    getLong("postal_town") ||
+    getLong("sublocality") ||
+    getLong("administrative_area_level_2");
+  const state = getShort("administrative_area_level_1");
+  const zip = getLong("postal_code");
+
+  return {
+    fullAddress: result.formatted_address || [streetAddress, city, state, zip].filter(Boolean).join(", "),
+    streetAddress: streetAddress || result.formatted_address || "",
+    city,
+    state,
+    zip,
+    lat: Number(location.lat),
+    lng: Number(location.lng),
+  };
+}
+
+async function resolveAddress(address: string): Promise<ResolvedAddress | null> {
   const apiKey = storage.getSetting("google_maps_api_key");
   if (!apiKey) return null;
+
   try {
     const encoded = encodeURIComponent(address);
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${apiKey}`);
-    const data = await res.json();
-    if (data.results?.[0]?.geometry?.location) {
-      return data.results[0].geometry.location;
-    }
-    return null;
-  } catch {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${apiKey}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const result = data.results?.[0];
+    return result ? parseGoogleAddressResult(result) : null;
+  } catch (error) {
+    console.error("[Maps] Geocode failed:", error);
     return null;
   }
+}
+
+// Geocode address to lat/lng
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const resolved = await resolveAddress(address);
+  return resolved ? { lat: resolved.lat, lng: resolved.lng } : null;
 }
 
 export function registerRoutes(httpServer: Server, app: Express): void {
@@ -667,7 +716,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json({
       ready: providers.some((provider) => provider.configured),
       providers,
-      policy: "verified-only",
+      policy: "verified-saved-prototype-preview",
     });
   });
 
@@ -777,8 +826,30 @@ export function registerRoutes(httpServer: Server, app: Express): void {
       }
     }
 
+    const verificationStatus = measureResult.verificationStatus ?? "verified";
+
+    // Prototype geometry is returned to the UI for field review, but is not
+    // written into customer measurement history until the worker marks it verified.
+    if (verificationStatus === "prototype") {
+      return res.json({
+        measurement: {
+          ...measureResult,
+          address,
+          lat: coords ? coords.lat : undefined,
+          lng: coords ? coords.lng : undefined,
+          notes,
+        },
+        linkedLead,
+        source: measureResult.source,
+        saved: false,
+        verificationStatus: "prototype",
+        warning: "Prototype RoofScan result — review against field or third-party measurements before estimating. This result was not saved.",
+      });
+    }
+
+    const { verificationStatus: _verificationStatus, ...persistableMeasurement } = measureResult;
     const measurement = storage.createMeasurement({
-      ...measureResult,
+      ...persistableMeasurement,
       address,
       lat: coords ? coords.lat : undefined,
       lng: coords ? coords.lng : undefined,
@@ -786,7 +857,13 @@ export function registerRoutes(httpServer: Server, app: Express): void {
       linkedLeadId,
     });
 
-    res.json({ measurement, linkedLead, source: measureResult.source });
+    res.json({
+      measurement,
+      linkedLead,
+      source: measureResult.source,
+      saved: true,
+      verificationStatus: "verified",
+    });
   });
 
   app.patch("/api/measurements/:id", (req, res) => {
@@ -845,9 +922,82 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json({ configured: !!key, provider: key ? "artemis" : "google-solar" });
   });
 
-    app.get("/api/config/maps-key", (req, res) => {
-    const key = storage.getSetting("google_maps_api_key");
-    res.json({ key: key || null });
+  app.get("/api/config/maps-key", (_req, res) => {
+    // Never expose the production Google key to the browser. Address lookup is
+    // proxied through the CRM backend so API restrictions can remain server-side.
+    res.json({ configured: Boolean(storage.getSetting("google_maps_api_key")) });
+  });
+
+  app.get("/api/address-autocomplete", async (req, res) => {
+    const input = String(req.query.q || "").trim();
+    if (input.length < 3) return res.json({ suggestions: [] });
+
+    const apiKey = storage.getSetting("google_maps_api_key");
+    if (!apiKey) {
+      return res.status(503).json({ error: "Google Maps API key is not configured." });
+    }
+
+    const suggestions: any[] = [];
+
+    // Prefer Places Autocomplete when the Places API is enabled.
+    try {
+      const placesUrl =
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json" +
+        `?input=${encodeURIComponent(input)}&types=address&components=country:us&key=${apiKey}`;
+      const placesResponse = await fetch(placesUrl, { signal: AbortSignal.timeout(8000) });
+      if (placesResponse.ok) {
+        const placesData: any = await placesResponse.json();
+        if (placesData.status === "OK" && Array.isArray(placesData.predictions)) {
+          for (const prediction of placesData.predictions.slice(0, 6)) {
+            suggestions.push({
+              id: prediction.place_id,
+              description: prediction.description,
+              mainText: prediction.structured_formatting?.main_text || prediction.description,
+              secondaryText: prediction.structured_formatting?.secondary_text || "",
+            });
+          }
+        } else if (placesData.status && placesData.status !== "ZERO_RESULTS") {
+          console.warn("[Maps] Places autocomplete unavailable:", placesData.status, placesData.error_message || "");
+        }
+      }
+    } catch (error) {
+      console.warn("[Maps] Places autocomplete request failed:", error);
+    }
+
+    // Geocoding fallback keeps the type-ahead usable even when the Places API
+    // has not been enabled on the Google Cloud project yet.
+    if (suggestions.length === 0) {
+      try {
+        const geocodeUrl =
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(input)}&key=${apiKey}`;
+        const geocodeResponse = await fetch(geocodeUrl, { signal: AbortSignal.timeout(8000) });
+        if (geocodeResponse.ok) {
+          const geocodeData: any = await geocodeResponse.json();
+          for (const result of (geocodeData.results || []).slice(0, 6)) {
+            const parsed = parseGoogleAddressResult(result);
+            if (!parsed) continue;
+            suggestions.push({
+              id: result.place_id || parsed.fullAddress,
+              description: parsed.fullAddress,
+              mainText: parsed.streetAddress || parsed.fullAddress,
+              secondaryText: [parsed.city, parsed.state, parsed.zip].filter(Boolean).join(", "),
+            });
+          }
+        }
+      } catch (error) {
+        console.warn("[Maps] Geocoding autocomplete fallback failed:", error);
+      }
+    }
+
+    res.json({ suggestions });
+  });
+
+  app.get("/api/address-resolve", async (req, res) => {
+    const address = String(req.query.address || "").trim();
+    if (!address) return res.status(400).json({ error: "Address required" });
+    const resolved = await resolveAddress(address);
+    if (!resolved) return res.status(422).json({ error: "Address could not be resolved" });
+    res.json(resolved);
   });
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
