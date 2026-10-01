@@ -14,11 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  artemis: { label: "Artemis (Nearmap)", color: "#5cbf00" },
-  "google-solar": { label: "Google Solar API", color: "#0ea5e9" },
-  estimated: { label: "Estimated", color: "#f59e0b" },
-  demo: { label: "Demo Data", color: "#8a9099" },
-  satellite: { label: "Satellite", color: "#0ea5e9" },
+  artemis: { label: "Artemis", color: "#5cbf00" },
+  "cw-open-data": { label: "CW RoofScan", color: "#0ea5e9" },
+  eagleview: { label: "EagleView", color: "#2563eb" },
+  nearmap: { label: "Nearmap", color: "#14b8a6" },
+  "uploaded-report": { label: "Uploaded Report", color: "#8b5cf6" },
   manual: { label: "Manual", color: "#8b5cf6" },
 };
 
@@ -134,8 +134,8 @@ export default function Measurements() {
   });
 
   const { data: providerStatus } = useQuery({
-    queryKey: ["/api/config/artemis-status"],
-    queryFn: () => apiRequest("GET", "/api/config/artemis-status").then(r => r.json()),
+    queryKey: ["/api/config/roofscan-status"],
+    queryFn: () => apiRequest("GET", "/api/config/roofscan-status").then(r => r.json()),
   });
 
   const measureMutation = useMutation({
@@ -149,7 +149,14 @@ export default function Measurements() {
       const leadMsg = result.linkedLead ? ` Auto-linked to ${result.linkedLead.firstName} ${result.linkedLead.lastName}.` : "";
       toast({ title: `Measurement saved — ${result.measurement?.squares} squares`, description: `Source: ${src}.${leadMsg}` });
     },
-    onError: () => toast({ title: "Measurement failed", variant: "destructive" }),
+    onError: (error: any) => {
+      setLastResult(null);
+      toast({
+        title: "Verified measurement unavailable",
+        description: error?.message || "CW RoofScan did not return a verified measurement. No estimated values were saved.",
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -172,21 +179,21 @@ export default function Measurements() {
       <div>
         <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>ROOF MEASUREMENTS</h1>
         <p style={{ fontSize: 13, color: "var(--color-muted)" }}>
-          Pull satellite measurements for any address — no estimate required. Results are saved to your history and auto-linked to matching leads.
+          Generate verified roof measurements from supported imagery and measurement providers. Results are saved to history and auto-linked to matching leads.
         </p>
         {providerStatus && (
           <div className="mt-3 flex items-center gap-3 px-4 py-2.5 rounded-lg" style={{
-            background: providerStatus.configured ? "rgba(92,191,0,0.08)" : "rgba(245,158,11,0.08)",
-            border: `1px solid ${providerStatus.configured ? "rgba(92,191,0,0.25)" : "rgba(245,158,11,0.25)"}`,
+            background: providerStatus.ready ? "rgba(92,191,0,0.08)" : "rgba(245,158,11,0.08)",
+            border: `1px solid ${providerStatus.ready ? "rgba(92,191,0,0.25)" : "rgba(245,158,11,0.25)"}`,
           }}>
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: providerStatus.configured ? "#5cbf00" : "#f59e0b" }} />
-            {providerStatus.configured ? (
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: providerStatus.ready ? "#5cbf00" : "#f59e0b" }} />
+            {providerStatus.ready ? (
               <span style={{ fontSize: 12, color: "#5cbf00", fontWeight: 600 }}>
-                Active Provider: Artemis (Nearmap + LiDAR) — sub-centimeter accuracy
+                CW RoofScan ready — verified measurements only. No estimated or randomized fallback values.
               </span>
             ) : (
               <span style={{ fontSize: 12, color: "#f59e0b" }}>
-                Using Google Solar API fallback. Add your <strong>Artemis API key</strong> in Settings for Nearmap-powered measurements (~$5.75/report).
+                RoofScan provider not configured yet. Measurements will fail safely rather than guess. Configure a supported provider in Settings or upload a verified report.
               </span>
             )}
             <a href="/#/settings" style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-muted)", textDecoration: "underline" }}>Settings</a>
@@ -333,7 +340,7 @@ export default function Measurements() {
             <Satellite size={40} style={{ color: "var(--color-muted)", margin: "0 auto 12px" }} />
             <div style={{ color: "var(--color-text)", fontSize: 15, fontWeight: 600, marginBottom: 4 }}>No measurements yet</div>
             <div style={{ color: "var(--color-muted)", fontSize: 13 }}>
-              Enter any address above to pull satellite roof data instantly
+              Enter an address above to request a verified CW RoofScan measurement
             </div>
           </div>
         ) : (
