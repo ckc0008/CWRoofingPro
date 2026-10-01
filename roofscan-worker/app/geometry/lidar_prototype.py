@@ -91,6 +91,12 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         horizontal_unit_to_meters = source_crs.axis_info[0].unit_conversion_factor or 1.0
     unit_to_feet = horizontal_unit_to_meters * 3.280839895
 
+    # Candidate interior edge lengths are produced in the LiDAR CRS units.
+    # Publish an explicit feet value so the CRM never mistakes meters/CRS units
+    # for roofing linear feet.
+    for edge in candidate_edges:
+        edge['lengthFt'] = round(float(edge.get('length', 0.0)) * unit_to_feet, 2)
+
     facet_metrics = estimate_facet_areas(
         local_footprint,
         bx,
