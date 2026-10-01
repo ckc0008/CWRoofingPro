@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.geometry.lidar_prototype import dominant_roof_plane
@@ -9,6 +9,14 @@ from app.services.overture import find_building
 from app.services.usgs import find_lidar_products
 
 app = FastAPI(title='CW RoofScan Worker', version='0.1.0')
+
+def require_api_token(authorization: str | None = Header(default=None)):
+    expected = os.getenv('ROOFSCAN_API_TOKEN')
+    if not expected:
+        raise HTTPException(status_code=503, detail='ROOFSCAN_API_TOKEN is not configured')
+    if authorization != f'Bearer {expected}':
+        raise HTTPException(status_code=401, detail='Unauthorized')
+    return True
 
 
 class MeasureRequest(BaseModel):
@@ -21,8 +29,16 @@ class MeasureRequest(BaseModel):
 def health():
     return {'ok': True, 'service': 'cw-roofscan-worker'}
 
+@app.get('/ready')
+def ready():
+    return {
+        'ready': bool(os.getenv('ROOFSCAN_API_TOKEN')),
+        'service': 'cw-roofscan-worker',
+        'lidarPrototypeEnabled': os.getenv('ROOFSCAN_ENABLE_LIDAR_PROTOTYPE', '').lower() in {'1', 'true', 'yes'},
+    }
 
-@app.post('/v1/measure')
+
+@app.post('/v1/measure', dependencies=[Depends(require_api_token)])
 def measure(request: MeasureRequest) -> dict[str, Any]:
     try:
         building = find_building(request.lat, request.lng)
