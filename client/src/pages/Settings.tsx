@@ -154,6 +154,13 @@ export default function Settings() {
           placeholder="https://roofscan-worker.example.com"
         />
         <SettingField
+          label="CW RoofScan Worker Token"
+          description="Shared bearer token used only between the CRM and the RoofScan worker. Set the same value as ROOFSCAN_API_TOKEN on the deployed worker."
+          settingKey="roofscan_worker_token"
+          type="password"
+          placeholder="long random secret"
+        />
+        <SettingField
           label="Artemis API URL"
           description="Paste the production roof-report endpoint supplied in your Artemis API documentation. CW does not assume or hard-code a private provider endpoint."
           settingKey="artemis_api_url"
