@@ -148,6 +148,12 @@ export default function Settings() {
 
       <SettingGroup title="CW ROOFSCAN PROVIDERS" icon={Satellite} color="#5cbf00">
         <SettingField
+          label="CW RoofScan Worker URL"
+          description="URL of the CW-owned geospatial worker. When configured, RoofScan tries this verified engine before commercial providers."
+          settingKey="roofscan_worker_url"
+          placeholder="https://roofscan-worker.example.com"
+        />
+        <SettingField
           label="Artemis API URL"
           description="Paste the production roof-report endpoint supplied in your Artemis API documentation. CW does not assume or hard-code a private provider endpoint."
           settingKey="artemis_api_url"
