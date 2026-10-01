@@ -1,39 +1,28 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
-import { MapPin, Loader2 } from "lucide-react";
+import { Loader2, MapPin } from "lucide-react";
 
-// Singleton: load the Google Maps Places script once
-let scriptPromise: Promise<void> | null = null;
+interface ParsedAddress {
+  fullAddress: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zip: string;
+  lat?: number;
+  lng?: number;
+}
 
-function loadPlacesScript(apiKey: string): Promise<void> {
-  if (scriptPromise) return scriptPromise;
-  scriptPromise = new Promise((resolve, reject) => {
-    if ((window as any).google?.maps?.places) { resolve(); return; }
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => { scriptPromise = null; reject(); };
-    document.head.appendChild(script);
-  });
-  return scriptPromise;
+interface AddressSuggestion {
+  id: string;
+  description: string;
+  mainText?: string;
+  secondaryText?: string;
 }
 
 interface AddressAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
-  /** Called when user picks a suggestion — gives back parsed components */
-  onSelect?: (parsed: {
-    fullAddress: string;
-    streetAddress: string;
-    city: string;
-    state: string;
-    zip: string;
-    lat?: number;
-    lng?: number;
-  }) => void;
+  onSelect?: (parsed: ParsedAddress) => void;
   placeholder?: string;
   required?: boolean;
   className?: string;
@@ -52,107 +41,89 @@ export function AddressAutocomplete({
   "data-testid": testId,
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<any>(null);
-  const [ready, setReady] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const sessionTokenRef = useRef<any>(null);
-  const serviceRef = useRef<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
-  // Fetch the maps API key from the backend
-  const { data: configData } = useQuery({
-    queryKey: ["/api/config/maps-key"],
-    queryFn: () => apiRequest("GET", "/api/config/maps-key").then(r => r.json()),
-    staleTime: Infinity,
-  });
+  const fetchSuggestions = useCallback((rawInput: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
 
-  const apiKey: string | null = configData?.key ?? null;
-
-  // Load Places script once we have a key
-  useEffect(() => {
-    if (!apiKey) return;
-    loadPlacesScript(apiKey).then(() => {
-      const google = (window as any).google;
-      serviceRef.current = new google.maps.places.AutocompleteService();
-      sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-      setReady(true);
-    }).catch(() => {});
-  }, [apiKey]);
-
-  // Fetch predictions on input change
-  const fetchSuggestions = useCallback((input: string) => {
-    if (!ready || !serviceRef.current || input.length < 3) {
+    const input = rawInput.trim();
+    if (input.length < 3) {
       setSuggestions([]);
+      setShowDropdown(false);
+      setLoading(false);
       return;
     }
-    serviceRef.current.getPlacePredictions(
-      {
-        input,
-        sessionToken: sessionTokenRef.current,
-        componentRestrictions: { country: "us" },
-        types: ["address"],
-      },
-      (predictions: any[], status: string) => {
-        if (status === "OK" && predictions) {
-          setSuggestions(predictions);
-          setShowDropdown(true);
-        } else {
-          setSuggestions([]);
-        }
-      }
-    );
-  }, [ready]);
 
-  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value;
-    onChange(v);
-    fetchSuggestions(v);
-  }
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
 
-  function pickSuggestion(prediction: any) {
-    const google = (window as any).google;
-    const placesService = new google.maps.places.PlacesService(document.createElement("div"));
-    placesService.getDetails(
-      { placeId: prediction.place_id, sessionToken: sessionTokenRef.current, fields: ["address_components", "geometry", "formatted_address"] },
-      (place: any, status: string) => {
-        if (status !== "OK" || !place) {
-          // Fallback: just use the description text
-          onChange(prediction.description);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const response = await apiRequest(
+          "GET",
+          `/api/address-autocomplete?q=${encodeURIComponent(input)}`,
+        );
+        const data = await response.json();
+        if (requestId !== requestIdRef.current) return;
+        const next = Array.isArray(data?.suggestions) ? data.suggestions : [];
+        setSuggestions(next);
+        setShowDropdown(next.length > 0);
+      } catch {
+        if (requestId === requestIdRef.current) {
           setSuggestions([]);
           setShowDropdown(false);
-          return;
         }
-        // Renew session token after a selection
-        sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-
-        const comps = place.address_components || [];
-        const get = (type: string) => comps.find((c: any) => c.types.includes(type))?.long_name || "";
-        const getShort = (type: string) => comps.find((c: any) => c.types.includes(type))?.short_name || "";
-
-        const streetNum = get("street_number");
-        const route = get("route");
-        const streetAddress = [streetNum, route].filter(Boolean).join(" ");
-        const city = get("locality") || get("sublocality") || get("administrative_area_level_2");
-        const state = getShort("administrative_area_level_1");
-        const zip = get("postal_code");
-        const lat = place.geometry?.location?.lat();
-        const lng = place.geometry?.location?.lng();
-        const fullAddress = streetAddress || place.formatted_address;
-
-        onChange(fullAddress);
-        setSuggestions([]);
-        setShowDropdown(false);
-        onSelect?.({ fullAddress, streetAddress, city, state, zip, lat, lng });
+      } finally {
+        if (requestId === requestIdRef.current) setLoading(false);
       }
-    );
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const nextValue = e.target.value;
+    onChange(nextValue);
+    fetchSuggestions(nextValue);
   }
 
-  // Close dropdown on outside click
+  async function pickSuggestion(suggestion: AddressSuggestion) {
+    setResolving(true);
+    try {
+      const response = await apiRequest(
+        "GET",
+        `/api/address-resolve?address=${encodeURIComponent(suggestion.description)}`,
+      );
+      const parsed: ParsedAddress = await response.json();
+      onChange(parsed.fullAddress || suggestion.description);
+      onSelect?.(parsed);
+    } catch {
+      onChange(suggestion.description);
+    } finally {
+      setSuggestions([]);
+      setShowDropdown(false);
+      setResolving(false);
+    }
+  }
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-          inputRef.current && !inputRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
         setShowDropdown(false);
       }
     }
@@ -168,7 +139,7 @@ export function AddressAutocomplete({
     width: "100%",
     height: 36,
     paddingLeft: 36,
-    paddingRight: 12,
+    paddingRight: 36,
     borderRadius: 6,
     border: "1px solid var(--color-border)",
     outline: "none",
@@ -194,14 +165,14 @@ export function AddressAutocomplete({
         className={className}
         style={baseInputStyle}
         autoComplete="off"
+        spellCheck={false}
       />
-      {!apiKey && value.length === 0 && (
-        <div
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs pointer-events-none"
-          style={{ color: "var(--color-muted)", fontSize: 10 }}
-        >
-          Add Google Maps key in Settings for suggestions
-        </div>
+      {(loading || resolving) && (
+        <Loader2
+          size={14}
+          className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin"
+          style={{ color: "var(--color-muted)" }}
+        />
       )}
 
       {showDropdown && suggestions.length > 0 && (
@@ -215,26 +186,50 @@ export function AddressAutocomplete({
             zIndex: 9999,
           }}
         >
-          {suggestions.map((s, i) => (
+          {suggestions.map((suggestion, index) => (
             <button
-              key={s.place_id}
+              key={suggestion.id}
               type="button"
-              onMouseDown={() => pickSuggestion(s)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                void pickSuggestion(suggestion);
+              }}
               className="w-full text-left px-4 py-2.5 flex items-start gap-3 transition-colors"
               style={{
                 background: "transparent",
-                borderBottom: i < suggestions.length - 1 ? "1px solid var(--color-border)" : "none",
+                borderBottom:
+                  index < suggestions.length - 1
+                    ? "1px solid var(--color-border)"
+                    : "none",
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "var(--color-surface-2)")
+              }
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              <MapPin size={13} className="flex-shrink-0 mt-0.5" style={{ color: "var(--color-green)" }} />
+              <MapPin
+                size={13}
+                className="flex-shrink-0 mt-0.5"
+                style={{ color: "var(--color-green)" }}
+              />
               <div>
-                <div style={{ fontSize: 13, color: "var(--color-text)", lineHeight: 1.3 }}>
-                  {s.structured_formatting?.main_text || s.description}
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "var(--color-text)",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {suggestion.mainText || suggestion.description}
                 </div>
-                <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 1 }}>
-                  {s.structured_formatting?.secondary_text || ""}
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-muted)",
+                    marginTop: 1,
+                  }}
+                >
+                  {suggestion.secondaryText || suggestion.description}
                 </div>
               </div>
             </button>
