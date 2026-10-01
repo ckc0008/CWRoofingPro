@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
@@ -325,7 +325,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         assignedTo: req.body.assignedTo || null,
         roofAge: req.body.roofAge ? Number(req.body.roofAge) : null,
         roofType: req.body.roofType || null,
-        insuranceClaim: req.body.insuranceClaim ? 1 : 0,
+        insuranceClaim: Boolean(req.body.insuranceClaim),
         insuranceCompany: req.body.insuranceCompany || null,
         claimNumber: req.body.claimNumber || null,
         followUpDate: req.body.followUpDate || null,
@@ -712,12 +712,12 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     }
 
     const measurement = storage.createMeasurement({
+      ...measureResult,
       address,
       lat: coords ? coords.lat : undefined,
       lng: coords ? coords.lng : undefined,
       notes,
       linkedLeadId,
-      ...measureResult,
     });
 
     res.json({ measurement, linkedLead, source: measureResult.source });
@@ -824,8 +824,13 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         rawText = fileBuffer.toString("utf8");
       } else {
         // PDF report
-        const pdfData = await pdfParse(fileBuffer);
-        rawText = pdfData.text;
+        const parser = new PDFParse({ data: fileBuffer });
+        try {
+          const pdfData = await parser.getText();
+          rawText = pdfData.text;
+        } finally {
+          await parser.destroy();
+        }
       }
 
       let extracted: any = { source: "uploaded-report", rawText };
@@ -974,8 +979,6 @@ ${rawText.slice(0, 8000)}`;
         source: "uploaded-report",
         rawData: JSON.stringify({ provider: extracted.provider, reportId: extracted.reportId, reportDate: extracted.reportDate }),
         notes: `Parsed from ${extracted.provider} PDF report`,
-        lat: lead?.lat || null,
-        lng: lead?.lng || null,
       });
 
       res.json({
