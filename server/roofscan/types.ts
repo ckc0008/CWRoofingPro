@@ -24,6 +24,7 @@ export interface RoofMeasurementResult {
   imageryDate?: string | null;
   providerMetadata?: string | null;
   rawData?: string | null;
+  verificationStatus?: "verified" | "prototype";
 }
 
 export interface RoofMeasurementRequest {
