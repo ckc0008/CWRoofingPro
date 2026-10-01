@@ -1,5 +1,4 @@
 import hashlib
-import math
 import os
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import shape
 from shapely.ops import transform as transform_geom
 from shapely import contains_xy
-from sklearn.linear_model import LinearRegression, RANSACRegressor
+from app.geometry.planes import segment_roof_planes
 
 CACHE_DIR = Path(os.getenv('ROOFSCAN_LIDAR_CACHE', '/tmp/roofscan-lidar'))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,26 +66,28 @@ def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
         high = bz >= cutoff
         bx, by, bz = bx[high], by[high], bz[high]
 
-    features = np.column_stack([bx, by])
-    estimator = RANSACRegressor(
-        estimator=LinearRegression(),
-        min_samples=max(30, int(len(bz) * 0.15)),
-        residual_threshold=0.25,
-        random_state=42,
+    planes = segment_roof_planes(
+        bx, by, bz,
+        residual_threshold=0.22,
+        min_points=max(80, min(250, int(len(bz) * 0.04))),
+        max_planes=16,
     )
-    estimator.fit(features, bz)
-    a, b = estimator.estimator_.coef_
-    slope = math.sqrt(float(a) ** 2 + float(b) ** 2)
-    pitch_rise = slope * 12.0
-    angle_deg = math.degrees(math.atan(slope))
-    inlier_ratio = float(np.mean(estimator.inlier_mask_))
+    if not planes:
+        raise ValueError('No stable roof planes could be segmented from LiDAR points')
+
+    dominant = planes[0]
+    public_planes = [
+        {key: value for key, value in plane.items() if key != 'sourceIndices'}
+        for plane in planes
+    ]
 
     return {
-        'dominantPitchRise': round(pitch_rise, 2),
-        'dominantPitch': f'{round(pitch_rise)}/12',
-        'slopeDegrees': round(angle_deg, 2),
+        'dominantPitchRise': dominant['pitchRise'],
+        'dominantPitch': dominant['pitch'],
+        'slopeDegrees': dominant['slopeDegrees'],
         'pointCount': int(len(bz)),
-        'planeInlierRatio': round(inlier_ratio, 4),
+        'planeCount': len(public_planes),
+        'planes': public_planes,
         'sourceCrs': source_crs.to_string(),
         'classification6Used': bool(building_mask.sum() >= 100),
     }
