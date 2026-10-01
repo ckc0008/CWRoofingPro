@@ -108,6 +108,27 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+
+      // Non-blocking startup probe for the private RoofScan dependency.
+      // This does not make CRM availability depend on the worker, but it leaves
+      // an explicit production log proving whether private networking is usable.
+      const workerUrl = process.env.ROOFSCAN_WORKER_URL?.replace(/\/$/, "");
+      if (workerUrl) {
+        fetch(workerUrl + "/health", { signal: AbortSignal.timeout(5000) })
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const payload: any = await response.json().catch(() => ({}));
+            log(
+              `worker health ok${payload?.service ? ` (${payload.service})` : ""}`,
+              "roofscan",
+            );
+          })
+          .catch((error) => {
+            console.warn("[roofscan] startup worker health probe failed:", error?.message || error);
+          });
+      }
     },
   );
 })();
