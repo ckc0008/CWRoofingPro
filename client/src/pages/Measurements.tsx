@@ -131,6 +131,7 @@ export default function Measurements() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [lastResult, setLastResult] = useState<any>(null);
+  const [diagnosticsResult, setDiagnosticsResult] = useState<any>(null);
 
   const { data: measurements = [], isLoading, refetch } = useQuery({
     queryKey: ["/api/measurements"],
@@ -140,6 +141,29 @@ export default function Measurements() {
   const { data: providerStatus } = useQuery({
     queryKey: ["/api/config/roofscan-status"],
     queryFn: () => apiRequest("GET", "/api/config/roofscan-status").then(r => r.json()),
+  });
+
+  const cwWorkerConfigured = providerStatus?.providers?.some(
+    (provider: any) => provider.id === "cw-open-data" && provider.configured
+  );
+
+  const diagnosticMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/roofscan/diagnostics", data).then(r => r.json()),
+    onSuccess: (result) => {
+      setDiagnosticsResult(result);
+      toast({
+        title: "RoofScan Lab diagnostic complete",
+        description: "Prototype output loaded. Nothing was saved as a customer measurement.",
+      });
+    },
+    onError: (error: any) => {
+      setDiagnosticsResult(null);
+      toast({
+        title: "RoofScan Lab diagnostic failed",
+        description: error?.message || "The CW geospatial worker could not complete the diagnostic.",
+        variant: "destructive",
+      });
+    },
   });
 
   const measureMutation = useMutation({
@@ -224,6 +248,22 @@ export default function Measurements() {
                 />
               </div>
               <Button
+                data-testid="button-roofscan-diagnostics"
+                type="button"
+                disabled={diagnosticMutation.isPending || !address.trim() || !cwWorkerConfigured}
+                onClick={() => diagnosticMutation.mutate({ address: address.trim() })}
+                variant="outline"
+                className="flex items-center gap-2 font-semibold px-4 flex-shrink-0"
+                title={cwWorkerConfigured ? "Run prototype without saving" : "Configure CW RoofScan Worker URL in Settings"}
+                style={{ borderColor: "#0ea5e9", color: "#0ea5e9", background: "rgba(14,165,233,0.07)" }}
+              >
+                {diagnosticMutation.isPending ? (
+                  <><RefreshCw size={14} className="animate-spin" /> Lab...</>
+                ) : (
+                  <><GitFork size={14} /> RoofScan Lab</>
+                )}
+              </Button>
+              <Button
                 data-testid="button-measure"
                 type="submit"
                 disabled={measureMutation.isPending || !address.trim()}
@@ -250,6 +290,52 @@ export default function Measurements() {
             />
           </div>
         </form>
+
+        {/* RoofScan Lab — prototype output is never persisted */}
+        {diagnosticsResult && (
+          <div className="mt-5 p-5 rounded-xl" style={{ background: "rgba(14,165,233,0.07)", border: "1px solid rgba(14,165,233,0.28)" }}>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="font-display font-bold text-white" style={{ fontSize: 15 }}>ROOFSCAN LAB</div>
+                <div style={{ fontSize: 11, color: "#0ea5e9", marginTop: 2 }}>
+                  Prototype diagnostic only — nothing below was saved to the customer record.
+                </div>
+              </div>
+              <span className="cw-badge" style={{ color: "#0ea5e9", background: "rgba(14,165,233,0.12)" }}>
+                {diagnosticsResult.status || "diagnostic"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[
+                { label: "FOOTPRINT SF", value: diagnosticsResult.building?.footprintAreaSqFt?.toLocaleString?.() ?? "—" },
+                { label: "LIDAR PRODUCTS", value: diagnosticsResult.provenance?.lidarProductsFound ?? diagnosticsResult.lidarProducts?.length ?? "—" },
+                { label: "ROOF PLANES", value: diagnosticsResult.prototype?.planeCount ?? "—" },
+                { label: "PROTO ROOF SF", value: diagnosticsResult.prototype?.facetMetrics?.totalRoofAreaSqFt?.toLocaleString?.() ?? "—" },
+              ].map(({ label, value }) => (
+                <div key={label} className="p-3 rounded-lg text-center" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
+                  <div className="font-display font-bold" style={{ fontSize: 20, color: "#0ea5e9" }}>{value}</div>
+                  <div style={{ fontSize: 9, color: "var(--color-muted)", marginTop: 3, letterSpacing: "0.07em" }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {diagnosticsResult.prototype && (
+              <div className="flex gap-4 flex-wrap mb-3" style={{ fontSize: 12, color: "var(--color-muted)" }}>
+                <span>Pitch: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.dominantPitch ?? "—"}</strong></span>
+                <span>Eave: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.exteriorMetrics?.eaveLength ?? "—"} ft</strong></span>
+                <span>Rake: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.exteriorMetrics?.rakeLength ?? "—"} ft</strong></span>
+                <span>Ridges: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "ridge").length}</strong></span>
+                <span>Hips: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "hip").length}</strong></span>
+                <span>Valleys: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "valley").length}</strong></span>
+              </div>
+            )}
+
+            <div style={{ fontSize: 11, color: "var(--color-muted)", lineHeight: 1.5 }}>
+              {diagnosticsResult.reason || diagnosticsResult.warning}
+            </div>
+          </div>
+        )}
 
         {/* Last Result */}
         {lastResult && (
