@@ -66,3 +66,52 @@ Only after those gates are demonstrated on the benchmark set should the worker b
 ## Security audit gate
 
 Production dependencies must pass `npm audit --omit=dev` before launch. This branch exists to apply and validate non-breaking dependency fixes before deployment.
+
+
+## Railway production wiring
+
+Use two services in the same Railway project/environment so the worker can remain private.
+
+### Service 1: cw-roofing-pro
+
+- Source: GitHub `ckc0008/CWRoofingPro`, branch `main`
+- Root directory: `/`
+- Dockerfile: detected automatically
+- Public networking: generate a Railway domain
+- Healthcheck: `/api/health`
+- Persistent volume: mount at `/data`
+
+Variables:
+```
+DATABASE_PATH=/data/data.db
+UPLOADS_DIR=/data/uploads
+GOOGLE_MAPS_API_KEY=<your key>
+ROOFSCAN_WORKER_URL=http://${{roofscan-worker.RAILWAY_PRIVATE_DOMAIN}}:${{roofscan-worker.PORT}}
+ROOFSCAN_WORKER_TOKEN=${{shared.ROOFSCAN_API_TOKEN}}
+```
+
+Optional commercial fallback:
+```
+ARTEMIS_API_URL=
+ARTEMIS_API_KEY=
+```
+
+### Service 2: roofscan-worker
+
+- Source: same GitHub repo/branch
+- Root directory: `/roofscan-worker`
+- Dockerfile: detected automatically
+- Public networking: not required
+- Healthcheck: `/health`
+
+Variables:
+```
+ROOFSCAN_API_TOKEN=${{shared.ROOFSCAN_API_TOKEN}}
+ROOFSCAN_ENABLE_LIDAR_PROTOTYPE=true
+OVERTURE_RELEASE=2026-09-23.1
+ROOFSCAN_LIDAR_CACHE=/tmp/roofscan-lidar
+```
+
+Create `ROOFSCAN_API_TOKEN` once as a shared secret and reference it from both services. The CRM can now read these environment variables directly if the equivalent setting has not been saved through the Settings screen.
+
+The worker should stay on Railway private networking; only the CRM needs a public domain.
