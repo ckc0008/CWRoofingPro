@@ -26,3 +26,9 @@ jobs:
       - run: python -m compileall -q roofscan-worker/app
       - run: pip install -q numpy scikit-learn shapely pytest
       - run: PYTHONPATH=roofscan-worker pytest -q roofscan-worker/tests
+
+  docker-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cw-roofscan-worker:ci roofscan-worker
