@@ -42,8 +42,9 @@ ARTEMIS_API_KEY=
 
 - Source: same GitHub repo `ckc0008/CWRoofingPro`
 - Branch: `main`
-- Root directory: `/roofscan-worker`
-- Dockerfile: `/roofscan-worker/Dockerfile` (auto-detected from root directory)
+- Root directory: `/`
+- Dockerfile: `/Dockerfile.roofscan`
+- The dedicated worker Dockerfile copies only `roofscan-worker/requirements.txt` and `roofscan-worker/app` from the repo-root build context. This avoids Railway GitHub-source root-directory ambiguity.
 - Public networking: none required
 - Healthcheck path: `/health`
 - Restart policy: On Failure

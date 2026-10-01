@@ -14,4 +14,3 @@ uploads
 logs
 *.log
 .DS_Store
-roofscan-worker
