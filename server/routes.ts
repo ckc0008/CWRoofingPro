@@ -677,7 +677,8 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     if (!address) return res.status(400).json({ error: "Address required" });
 
     const workerUrl = storage.getSetting("roofscan_worker_url")?.replace(/\/$/, "");
-    if (!workerUrl) {
+    const workerToken = storage.getSetting("roofscan_worker_token");
+    if (!workerUrl || !workerToken) {
       return res.status(503).json({
         error: "CW RoofScan worker is not configured.",
         code: "ROOFSCAN_WORKER_NOT_CONFIGURED",
@@ -695,7 +696,10 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     try {
       const response = await fetch(workerUrl + "/v1/measure", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + workerToken,
+        },
         body: JSON.stringify({ address, lat: coords.lat, lng: coords.lng }),
         signal: AbortSignal.timeout(120000),
       });
@@ -848,7 +852,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
   app.get("/api/settings", (req, res) => {
-    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key", "artemis_api_url"];
+    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key", "artemis_api_url", "roofscan_worker_token"];
     const settings = storage.getAllSettings().map((s: any) =>
       SENSITIVE.includes(s.key) && s.value ? { ...s, value: "***" } : s
     );
