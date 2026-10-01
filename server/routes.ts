@@ -5,6 +5,7 @@ import pdfParse from "pdf-parse";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
+import { getRoofScanProviderStatus, measureRoof, RoofMeasurementUnavailableError } from "./roofscan";
 
 // EXIF/GPS extraction from photo files
 async function extractPhotoMeta(filePath: string): Promise<{ lat?: number; lng?: number; dateTaken?: string; address?: string }> {
@@ -677,59 +678,48 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json({ success: true, emailLog, note: "Email logged. Connect SMTP/SendGrid in Settings to actually send emails." });
   });
 
-  // ─── STANDALONE MEASUREMENTS ─────────────────────────────────────────────────
+  // ─── STANDALONE MEASUREMENTS / CW ROOFSCAN ───────────────────────────────────
   app.get("/api/measurements", (req, res) => res.json(storage.getMeasurements()));
+
+  app.get("/api/config/roofscan-status", (_req, res) => {
+    const providers = getRoofScanProviderStatus();
+    res.json({
+      ready: providers.some((provider) => provider.configured),
+      providers,
+      policy: "verified-only",
+    });
+  });
 
   app.post("/api/measurements", async (req, res) => {
     const { address, notes, linkLeadAutomatically } = req.body;
     if (!address) return res.status(400).json({ error: "Address required" });
 
-    // Geocode first (needed for both Artemis and Google Solar fallback)
+    // Geocoding is used only to locate the property for licensed providers.
+    // It is not used to derive roofing geometry.
     const coords = await geocodeAddress(address);
 
-    let measureResult: any = null;
-
-    // TIER 1: Try Artemis (Nearmap/Vexcel -- most accurate, ~$5.75/report)
-    const artemisData = await getArtemisRoofReport(address, coords?.lat, coords?.lng);
-    if (artemisData && (artemisData.squares || artemisData.roofArea)) {
-      measureResult = parseArtemisReport(artemisData, address);
-    }
-
-    // TIER 2: Google Solar API fallback
-    if (!measureResult && coords) {
-      const solarData = await getGoogleSolarData(coords.lat, coords.lng);
-      if (solarData && solarData.solarPotential && solarData.solarPotential.roofSegmentStats) {
-        const segs = solarData.solarPotential.roofSegmentStats;
-        const totalM2 = segs.reduce((s: number, seg: any) => s + (seg.stats ? seg.stats.areaMeters2 : 0), 0);
-        const totalSqFt = totalM2 * 10.764;
-        measureResult = {
-          squares: Math.round(totalSqFt / 100),
-          totalArea: Math.round(totalSqFt),
-          pitch: "varies",
-          facets: segs.length,
-          source: "google-solar",
-          rawData: JSON.stringify(segs),
-        };
+    let measureResult;
+    try {
+      measureResult = await measureRoof({
+        address,
+        lat: coords?.lat,
+        lng: coords?.lng,
+      });
+    } catch (error) {
+      if (error instanceof RoofMeasurementUnavailableError) {
+        return res.status(422).json({
+          error: error.message,
+          code: error.code,
+          providerStatus: getRoofScanProviderStatus(),
+        });
       }
+      console.error("[RoofScan] Measurement failed:", error);
+      return res.status(500).json({
+        error: "Roof measurement failed. No measurement was saved.",
+        code: "ROOF_MEASUREMENT_ERROR",
+      });
     }
 
-    // TIER 3: Smart estimate (no imagery available)
-    if (!measureResult) {
-      const sq = Math.round((1200 + Math.random() * 1800) / 100);
-      measureResult = {
-        squares: sq,
-        totalArea: sq * 100,
-        pitch: "6/12",
-        facets: Math.floor(4 + Math.random() * 8),
-        ridgeLength: Math.round(30 + Math.random() * 40),
-        valleyLength: Math.round(10 + Math.random() * 30),
-        eaveLength: Math.round(80 + Math.random() * 120),
-        source: coords ? "estimated" : "demo",
-        rawData: null,
-      };
-    }
-
-    // Auto-link to a lead if address matches
     let linkedLeadId: number | undefined;
     let linkedLead: any = null;
     if (linkLeadAutomatically !== false) {
