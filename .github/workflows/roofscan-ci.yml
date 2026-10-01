@@ -32,3 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t cw-roofscan-worker:ci roofscan-worker
+
+  docker-crm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cw-roofing-pro:ci .
