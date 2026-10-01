@@ -1,5 +1,7 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
 import { eq, desc, like, or, and, inArray } from "drizzle-orm";
 import {
   leads, jobs, estimates, stormAlerts, projects, photos, emailLogs, measurements, settings,
@@ -24,7 +26,11 @@ import {
   type Commission, type InsertCommission,
 } from "@shared/schema";
 
-const sqlite = new Database("data.db");
+const databasePath = process.env.DATABASE_PATH || "data.db";
+const databaseDir = path.dirname(databasePath);
+if (databaseDir && databaseDir !== ".") fs.mkdirSync(databaseDir, { recursive: true });
+const sqlite = new Database(databasePath);
+sqlite.pragma("journal_mode = WAL");
 const db = drizzle(sqlite);
 
 // Create tables
