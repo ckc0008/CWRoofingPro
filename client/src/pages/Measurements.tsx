@@ -169,13 +169,26 @@ export default function Measurements() {
   const measureMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/measurements", data).then(r => r.json()),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      if (result.saved !== false) {
+        queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      }
       setLastResult(result);
       setAddress("");
       setNotes("");
       const src = SOURCE_LABELS[result.measurement?.source]?.label || result.source;
       const leadMsg = result.linkedLead ? ` Auto-linked to ${result.linkedLead.firstName} ${result.linkedLead.lastName}.` : "";
-      toast({ title: `Measurement saved — ${result.measurement?.squares} squares`, description: `Source: ${src}.${leadMsg}` });
+
+      if (result.verificationStatus === "prototype" || result.saved === false) {
+        toast({
+          title: `RoofScan prototype — ${result.measurement?.squares} squares`,
+          description: "LiDAR prototype loaded for field review. It was not saved as a verified customer measurement.",
+        });
+      } else {
+        toast({
+          title: `Measurement saved — ${result.measurement?.squares} squares`,
+          description: `Source: ${src}.${leadMsg}`,
+        });
+      }
     },
     onError: (error: any) => {
       setLastResult(null);
@@ -217,7 +230,7 @@ export default function Measurements() {
             <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: providerStatus.ready ? "#5cbf00" : "#f59e0b" }} />
             {providerStatus.ready ? (
               <span style={{ fontSize: 12, color: "#5cbf00", fontWeight: 600 }}>
-                CW RoofScan ready — verified measurements only. No estimated or randomized fallback values.
+                CW RoofScan ready — verified results are saved; LiDAR prototype results are shown for field review without being saved.
               </span>
             ) : (
               <span style={{ fontSize: 12, color: "#f59e0b" }}>
@@ -342,13 +355,34 @@ export default function Measurements() {
           <div className="mt-5 p-5 rounded-xl" style={{ background: "rgba(92,191,0,0.07)", border: "1px solid rgba(92,191,0,0.25)" }}>
             <div className="flex items-center justify-between mb-4">
               <span className="font-display font-bold text-white" style={{ fontSize: 15 }}>MEASUREMENT RESULT</span>
-              <span className="cw-badge" style={{
-                color: SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099",
-                background: `${SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099"}20`
-              }}>
-                {SOURCE_LABELS[lastResult.measurement?.source]?.label || lastResult.source}
-              </span>
+              <div className="flex items-center gap-2">
+                {(lastResult.verificationStatus === "prototype" || lastResult.saved === false) && (
+                  <span className="cw-badge" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.14)" }}>
+                    PROTOTYPE · NOT SAVED
+                  </span>
+                )}
+                <span className="cw-badge" style={{
+                  color: SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099",
+                  background: `${SOURCE_LABELS[lastResult.measurement?.source]?.color || "#8a9099"}20`
+                }}>
+                  {SOURCE_LABELS[lastResult.measurement?.source]?.label || lastResult.source}
+                </span>
+              </div>
             </div>
+
+            {(lastResult.verificationStatus === "prototype" || lastResult.saved === false) && (
+              <div
+                className="mb-4 px-4 py-3 rounded-lg"
+                style={{
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.25)",
+                  color: "#f59e0b",
+                  fontSize: 12,
+                }}
+              >
+                Prototype LiDAR geometry for field review only. Compare against field measurements, EagleView, Nearmap, or another verified report before using these quantities in an estimate.
+              </div>
+            )}
 
             {/* Big Numbers */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -404,16 +438,18 @@ export default function Measurements() {
               </div>
             )}
 
-            {/* Build Estimate CTA */}
-            <Link href="/estimates">
-              <a
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-semibold text-sm transition-all"
-                style={{ background: "var(--color-green)", color: "#0a1500" }}
-              >
-                <FileText size={14} /> Build Estimate from This Measurement
-                <ArrowRight size={14} />
-              </a>
-            </Link>
+            {/* Build Estimate CTA — only verified/saved measurements can feed estimating */}
+            {lastResult.saved !== false && lastResult.verificationStatus !== "prototype" && (
+              <Link href="/estimates">
+                <a
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-semibold text-sm transition-all"
+                  style={{ background: "var(--color-green)", color: "#0a1500" }}
+                >
+                  <FileText size={14} /> Build Estimate from This Measurement
+                  <ArrowRight size={14} />
+                </a>
+              </Link>
+            )}
           </div>
         )}
       </div>
