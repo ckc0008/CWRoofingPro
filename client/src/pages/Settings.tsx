@@ -85,10 +85,10 @@ export default function Settings() {
         <SettingField label="Company Address" settingKey="company_address" placeholder="Houston, TX" />
       </SettingGroup>
 
-      <SettingGroup title="GOOGLE MAPS & SOLAR API" icon={Satellite} color="#0ea5e9">
+      <SettingGroup title="GOOGLE MAPS & GEOCODING" icon={Satellite} color="#0ea5e9">
         <SettingField
           label="Google Maps API Key"
-          description="Enables satellite roof measurement via Google Solar API and address geocoding. Get yours at console.cloud.google.com — enable Solar API and Geocoding API."
+          description="Used for address lookup and map/geocoding features only. CW RoofScan does not use Google imagery or Solar API to derive roofing measurements."
           settingKey="google_maps_api_key"
           type="password"
           placeholder="AIza..."
@@ -146,13 +146,20 @@ export default function Settings() {
         />
       </SettingGroup>
 
-      <SettingGroup title="ARTEMIS ROOF MEASUREMENT" icon={Satellite} color="#5cbf00">
+      <SettingGroup title="CW ROOFSCAN PROVIDERS" icon={Satellite} color="#5cbf00">
+        <SettingField
+          label="Artemis API URL"
+          description="Paste the production roof-report endpoint supplied in your Artemis API documentation. CW does not assume or hard-code a private provider endpoint."
+          settingKey="artemis_api_url"
+          type="password"
+          placeholder="https://... provider endpoint"
+        />
         <SettingField
           label="Artemis API Key"
-          description="Artemis by artemispower.com — Nearmap + Vexcel + LiDAR roof reports (~$5.75/report). Request access at artemispower.com"
+          description="Bearer token supplied with your Artemis API access. Both the API URL and key are required before this provider is considered ready."
           settingKey="artemis_api_key"
           type="password"
-          placeholder="Bearer token from Artemis dashboard"
+          placeholder="Bearer token"
         />
       </SettingGroup>
 
