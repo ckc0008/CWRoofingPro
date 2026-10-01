@@ -1,5 +1,7 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
 import { eq, desc, like, or, and, inArray } from "drizzle-orm";
 import {
   leads, jobs, estimates, stormAlerts, projects, photos, emailLogs, measurements, settings,
@@ -24,7 +26,11 @@ import {
   type Commission, type InsertCommission,
 } from "@shared/schema";
 
-const sqlite = new Database("data.db");
+const databasePath = process.env.DATABASE_PATH || "data.db";
+const databaseDir = path.dirname(databasePath);
+if (databaseDir && databaseDir !== ".") fs.mkdirSync(databaseDir, { recursive: true });
+const sqlite = new Database(databasePath);
+sqlite.pragma("journal_mode = WAL");
 const db = drizzle(sqlite);
 
 // Create tables
@@ -179,7 +185,12 @@ sqlite.exec(`
     ridge_length REAL,
     valley_length REAL,
     eave_length REAL,
-    source TEXT DEFAULT 'satellite',
+    hip_length REAL,
+    rake_length REAL,
+    confidence REAL,
+    imagery_date TEXT,
+    provider_metadata TEXT,
+    source TEXT DEFAULT 'manual',
     raw_data TEXT,
     linked_lead_id INTEGER,
     notes TEXT,
@@ -330,6 +341,20 @@ sqlite.exec(`
     updated_at TEXT NOT NULL DEFAULT ''
   );
 `);
+
+// Lightweight additive migrations for existing local databases. These are safe to run on every startup.
+const measurementColumns = sqlite.prepare("PRAGMA table_info(measurements)").all() as Array<{ name: string }>;
+const measurementColumnNames = new Set(measurementColumns.map((column) => column.name));
+const measurementMigrations: Array<[string, string]> = [
+  ["hip_length", "ALTER TABLE measurements ADD COLUMN hip_length REAL"],
+  ["rake_length", "ALTER TABLE measurements ADD COLUMN rake_length REAL"],
+  ["confidence", "ALTER TABLE measurements ADD COLUMN confidence REAL"],
+  ["imagery_date", "ALTER TABLE measurements ADD COLUMN imagery_date TEXT"],
+  ["provider_metadata", "ALTER TABLE measurements ADD COLUMN provider_metadata TEXT"],
+];
+for (const [columnName, sql] of measurementMigrations) {
+  if (!measurementColumnNames.has(columnName)) sqlite.exec(sql);
+}
 
 function now() { return new Date().toISOString(); }
 function jobNum() { return `JOB-${Date.now().toString().slice(-6)}`; }

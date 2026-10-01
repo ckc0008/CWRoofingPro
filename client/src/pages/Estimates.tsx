@@ -229,7 +229,7 @@ function EstimateBuilder({ onClose }: { onClose: () => void }) {
             ["Dumpster", calcs.dumpsterCost],
             ["Permit", calcs.permitCost],
             hasGutter ? ["Gutters", calcs.gutterCost] : null,
-          ].filter(Boolean).map(([k, v]) => (
+          ].filter((item): item is [string, number] => item !== null).map(([k, v]) => (
             <div key={k as string} className="flex justify-between py-1.5"
               style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 13 }}>
               <span style={{ color: "var(--color-muted)" }}>{k}</span>

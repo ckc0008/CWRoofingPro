@@ -14,11 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  artemis: { label: "Artemis (Nearmap)", color: "#5cbf00" },
-  "google-solar": { label: "Google Solar API", color: "#0ea5e9" },
-  estimated: { label: "Estimated", color: "#f59e0b" },
-  demo: { label: "Demo Data", color: "#8a9099" },
-  satellite: { label: "Satellite", color: "#0ea5e9" },
+  artemis: { label: "Artemis", color: "#5cbf00" },
+  "cw-open-data": { label: "CW RoofScan", color: "#0ea5e9" },
+  eagleview: { label: "EagleView", color: "#2563eb" },
+  nearmap: { label: "Nearmap", color: "#14b8a6" },
+  "uploaded-report": { label: "Uploaded Report", color: "#8b5cf6" },
   manual: { label: "Manual", color: "#8b5cf6" },
 };
 
@@ -75,6 +75,10 @@ function MeasurementCard({ m, onDelete }: { m: any; onDelete: () => void }) {
         {m.ridgeLength && <span>Ridge: <span style={{ color: "var(--color-text)" }}>{m.ridgeLength} ft</span></span>}
         {m.valleyLength && <span>Valley: <span style={{ color: "var(--color-text)" }}>{m.valleyLength} ft</span></span>}
         {m.eaveLength && <span>Eave: <span style={{ color: "var(--color-text)" }}>{m.eaveLength} ft</span></span>}
+        {m.hipLength && <span>Hip: <span style={{ color: "var(--color-text)" }}>{m.hipLength} ft</span></span>}
+        {m.rakeLength && <span>Rake: <span style={{ color: "var(--color-text)" }}>{m.rakeLength} ft</span></span>}
+        {m.confidence != null && <span>Confidence: <span style={{ color: "var(--color-text)" }}>{Math.round(m.confidence * 100)}%</span></span>}
+        {m.imageryDate && <span>Imagery: <span style={{ color: "var(--color-text)" }}>{m.imageryDate}</span></span>}
       </div>
 
       {/* Linked Lead */}
@@ -127,6 +131,7 @@ export default function Measurements() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [lastResult, setLastResult] = useState<any>(null);
+  const [diagnosticsResult, setDiagnosticsResult] = useState<any>(null);
 
   const { data: measurements = [], isLoading, refetch } = useQuery({
     queryKey: ["/api/measurements"],
@@ -134,8 +139,31 @@ export default function Measurements() {
   });
 
   const { data: providerStatus } = useQuery({
-    queryKey: ["/api/config/artemis-status"],
-    queryFn: () => apiRequest("GET", "/api/config/artemis-status").then(r => r.json()),
+    queryKey: ["/api/config/roofscan-status"],
+    queryFn: () => apiRequest("GET", "/api/config/roofscan-status").then(r => r.json()),
+  });
+
+  const cwWorkerConfigured = providerStatus?.providers?.some(
+    (provider: any) => provider.id === "cw-open-data" && provider.configured
+  );
+
+  const diagnosticMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/roofscan/diagnostics", data).then(r => r.json()),
+    onSuccess: (result) => {
+      setDiagnosticsResult(result);
+      toast({
+        title: "RoofScan Lab diagnostic complete",
+        description: "Prototype output loaded. Nothing was saved as a customer measurement.",
+      });
+    },
+    onError: (error: any) => {
+      setDiagnosticsResult(null);
+      toast({
+        title: "RoofScan Lab diagnostic failed",
+        description: error?.message || "The CW geospatial worker could not complete the diagnostic.",
+        variant: "destructive",
+      });
+    },
   });
 
   const measureMutation = useMutation({
@@ -149,7 +177,14 @@ export default function Measurements() {
       const leadMsg = result.linkedLead ? ` Auto-linked to ${result.linkedLead.firstName} ${result.linkedLead.lastName}.` : "";
       toast({ title: `Measurement saved — ${result.measurement?.squares} squares`, description: `Source: ${src}.${leadMsg}` });
     },
-    onError: () => toast({ title: "Measurement failed", variant: "destructive" }),
+    onError: (error: any) => {
+      setLastResult(null);
+      toast({
+        title: "Verified measurement unavailable",
+        description: error?.message || "CW RoofScan did not return a verified measurement. No estimated values were saved.",
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -172,21 +207,21 @@ export default function Measurements() {
       <div>
         <h1 className="font-display font-bold text-white" style={{ fontSize: 26 }}>ROOF MEASUREMENTS</h1>
         <p style={{ fontSize: 13, color: "var(--color-muted)" }}>
-          Pull satellite measurements for any address — no estimate required. Results are saved to your history and auto-linked to matching leads.
+          Generate verified roof measurements from supported imagery and measurement providers. Results are saved to history and auto-linked to matching leads.
         </p>
         {providerStatus && (
           <div className="mt-3 flex items-center gap-3 px-4 py-2.5 rounded-lg" style={{
-            background: providerStatus.configured ? "rgba(92,191,0,0.08)" : "rgba(245,158,11,0.08)",
-            border: `1px solid ${providerStatus.configured ? "rgba(92,191,0,0.25)" : "rgba(245,158,11,0.25)"}`,
+            background: providerStatus.ready ? "rgba(92,191,0,0.08)" : "rgba(245,158,11,0.08)",
+            border: `1px solid ${providerStatus.ready ? "rgba(92,191,0,0.25)" : "rgba(245,158,11,0.25)"}`,
           }}>
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: providerStatus.configured ? "#5cbf00" : "#f59e0b" }} />
-            {providerStatus.configured ? (
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: providerStatus.ready ? "#5cbf00" : "#f59e0b" }} />
+            {providerStatus.ready ? (
               <span style={{ fontSize: 12, color: "#5cbf00", fontWeight: 600 }}>
-                Active Provider: Artemis (Nearmap + LiDAR) — sub-centimeter accuracy
+                CW RoofScan ready — verified measurements only. No estimated or randomized fallback values.
               </span>
             ) : (
               <span style={{ fontSize: 12, color: "#f59e0b" }}>
-                Using Google Solar API fallback. Add your <strong>Artemis API key</strong> in Settings for Nearmap-powered measurements (~$5.75/report).
+                RoofScan provider not configured yet. Measurements will fail safely rather than guess. Configure a supported provider in Settings or upload a verified report.
               </span>
             )}
             <a href="/#/settings" style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-muted)", textDecoration: "underline" }}>Settings</a>
@@ -212,6 +247,22 @@ export default function Measurements() {
                   required
                 />
               </div>
+              <Button
+                data-testid="button-roofscan-diagnostics"
+                type="button"
+                disabled={diagnosticMutation.isPending || !address.trim() || !cwWorkerConfigured}
+                onClick={() => diagnosticMutation.mutate({ address: address.trim() })}
+                variant="outline"
+                className="flex items-center gap-2 font-semibold px-4 flex-shrink-0"
+                title={cwWorkerConfigured ? "Run prototype without saving" : "Configure CW RoofScan Worker URL in Settings"}
+                style={{ borderColor: "#0ea5e9", color: "#0ea5e9", background: "rgba(14,165,233,0.07)" }}
+              >
+                {diagnosticMutation.isPending ? (
+                  <><RefreshCw size={14} className="animate-spin" /> Lab...</>
+                ) : (
+                  <><GitFork size={14} /> RoofScan Lab</>
+                )}
+              </Button>
               <Button
                 data-testid="button-measure"
                 type="submit"
@@ -239,6 +290,52 @@ export default function Measurements() {
             />
           </div>
         </form>
+
+        {/* RoofScan Lab — prototype output is never persisted */}
+        {diagnosticsResult && (
+          <div className="mt-5 p-5 rounded-xl" style={{ background: "rgba(14,165,233,0.07)", border: "1px solid rgba(14,165,233,0.28)" }}>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="font-display font-bold text-white" style={{ fontSize: 15 }}>ROOFSCAN LAB</div>
+                <div style={{ fontSize: 11, color: "#0ea5e9", marginTop: 2 }}>
+                  Prototype diagnostic only — nothing below was saved to the customer record.
+                </div>
+              </div>
+              <span className="cw-badge" style={{ color: "#0ea5e9", background: "rgba(14,165,233,0.12)" }}>
+                {diagnosticsResult.status || "diagnostic"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[
+                { label: "FOOTPRINT SF", value: diagnosticsResult.building?.footprintAreaSqFt?.toLocaleString?.() ?? "—" },
+                { label: "LIDAR PRODUCTS", value: diagnosticsResult.provenance?.lidarProductsFound ?? diagnosticsResult.lidarProducts?.length ?? "—" },
+                { label: "ROOF PLANES", value: diagnosticsResult.prototype?.planeCount ?? "—" },
+                { label: "PROTO ROOF SF", value: diagnosticsResult.prototype?.facetMetrics?.totalRoofAreaSqFt?.toLocaleString?.() ?? "—" },
+              ].map(({ label, value }) => (
+                <div key={label} className="p-3 rounded-lg text-center" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
+                  <div className="font-display font-bold" style={{ fontSize: 20, color: "#0ea5e9" }}>{value}</div>
+                  <div style={{ fontSize: 9, color: "var(--color-muted)", marginTop: 3, letterSpacing: "0.07em" }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {diagnosticsResult.prototype && (
+              <div className="flex gap-4 flex-wrap mb-3" style={{ fontSize: 12, color: "var(--color-muted)" }}>
+                <span>Pitch: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.dominantPitch ?? "—"}</strong></span>
+                <span>Eave: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.exteriorMetrics?.eaveLength ?? "—"} ft</strong></span>
+                <span>Rake: <strong style={{ color: "var(--color-text)" }}>{diagnosticsResult.prototype.exteriorMetrics?.rakeLength ?? "—"} ft</strong></span>
+                <span>Ridges: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "ridge").length}</strong></span>
+                <span>Hips: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "hip").length}</strong></span>
+                <span>Valleys: <strong style={{ color: "var(--color-text)" }}>{(diagnosticsResult.prototype.candidateEdges || []).filter((edge: any) => edge.type === "valley").length}</strong></span>
+              </div>
+            )}
+
+            <div style={{ fontSize: 11, color: "var(--color-muted)", lineHeight: 1.5 }}>
+              {diagnosticsResult.reason || diagnosticsResult.warning}
+            </div>
+          </div>
+        )}
 
         {/* Last Result */}
         {lastResult && (
@@ -274,6 +371,9 @@ export default function Measurements() {
                 {lastResult.measurement.ridgeLength && <span>Ridge: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.ridgeLength} ft</strong></span>}
                 {lastResult.measurement.valleyLength && <span>Valley: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.valleyLength} ft</strong></span>}
                 {lastResult.measurement.eaveLength && <span>Eave: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.eaveLength} ft</strong></span>}
+                {lastResult.measurement.hipLength && <span>Hip: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.hipLength} ft</strong></span>}
+                {lastResult.measurement.rakeLength && <span>Rake: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.rakeLength} ft</strong></span>}
+                {lastResult.measurement.confidence != null && <span>Confidence: <strong style={{ color: "var(--color-text)" }}>{Math.round(lastResult.measurement.confidence * 100)}%</strong></span>}
               </div>
             )}
 
@@ -333,7 +433,7 @@ export default function Measurements() {
             <Satellite size={40} style={{ color: "var(--color-muted)", margin: "0 auto 12px" }} />
             <div style={{ color: "var(--color-text)", fontSize: 15, fontWeight: 600, marginBottom: 4 }}>No measurements yet</div>
             <div style={{ color: "var(--color-muted)", fontSize: 13 }}>
-              Enter any address above to pull satellite roof data instantly
+              Enter an address above to request a verified CW RoofScan measurement
             </div>
           </div>
         ) : (

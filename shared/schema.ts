@@ -208,7 +208,12 @@ export const measurements = sqliteTable("measurements", {
   ridgeLength: real("ridge_length"),
   valleyLength: real("valley_length"),
   eaveLength: real("eave_length"),
-  source: text("source").default("satellite"), // satellite, google-solar, manual, demo
+  hipLength: real("hip_length"),
+  rakeLength: real("rake_length"),
+  confidence: real("confidence"), // normalized 0..1
+  imageryDate: text("imagery_date"),
+  providerMetadata: text("provider_metadata"), // JSON: imagery/elevation/provider provenance
+  source: text("source").default("manual"), // artemis, cw-open-data, eagleview, nearmap, uploaded-report, manual
   rawData: text("raw_data"), // JSON
   linkedLeadId: integer("linked_lead_id"),
   notes: text("notes"),

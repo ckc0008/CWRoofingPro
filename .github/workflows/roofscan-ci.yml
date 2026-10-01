@@ -1,0 +1,40 @@
+name: RoofScan CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  python-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q roofscan-worker/app
+      - run: pip install -q numpy scikit-learn shapely pytest
+      - run: PYTHONPATH=roofscan-worker pytest -q roofscan-worker/tests
+
+  docker-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cw-roofscan-worker:ci roofscan-worker
+
+  docker-crm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cw-roofing-pro:ci .

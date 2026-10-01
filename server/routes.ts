@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
+import { getRoofScanProviderStatus, measureRoof, RoofMeasurementUnavailableError } from "./roofscan";
 
 // EXIF/GPS extraction from photo files
 async function extractPhotoMeta(filePath: string): Promise<{ lat?: number; lng?: number; dateTaken?: string; address?: string }> {
@@ -92,7 +93,7 @@ async function matchLeadToGPS(lat: number, lng: number, address?: string): Promi
 }
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), "uploads");
+const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const upload = multer({
@@ -324,7 +325,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         assignedTo: req.body.assignedTo || null,
         roofAge: req.body.roofAge ? Number(req.body.roofAge) : null,
         roofType: req.body.roofType || null,
-        insuranceClaim: req.body.insuranceClaim ? 1 : 0,
+        insuranceClaim: Boolean(req.body.insuranceClaim),
         insuranceCompany: req.body.insuranceCompany || null,
         claimNumber: req.body.claimNumber || null,
         followUpDate: req.body.followUpDate || null,
@@ -386,58 +387,39 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json(est);
   });
 
-  // ─── ROOF MEASUREMENT via Google Solar API ────────────────────────────────
+  // ─── ROOF MEASUREMENT (legacy endpoint backed by CW RoofScan) ────────────────
   app.post("/api/measure", async (req, res) => {
     const { address } = req.body;
     if (!address) return res.status(400).json({ error: "Address required" });
+
     const coords = await geocodeAddress(address);
-    if (!coords) {
-      // Return a mock measurement for demo
-      const mockSquares = Math.round((1200 + Math.random() * 1800) / 100);
-      return res.json({
-        source: "demo",
+
+    try {
+      const measurement = await measureRoof({
         address,
-        squares: mockSquares,
-        totalArea: mockSquares * 100,
-        pitch: "6/12",
-        facets: Math.floor(4 + Math.random() * 8),
-        ridgeLength: Math.round(30 + Math.random() * 40),
-        valleyLength: Math.round(10 + Math.random() * 30),
-        eaveLength: Math.round(80 + Math.random() * 120),
-        hipLength: Math.round(20 + Math.random() * 30),
-        rakeLength: Math.round(40 + Math.random() * 60),
-        lat: null, lng: null,
-        note: "Demo measurement — add Google Maps API key in Settings for real satellite data",
+        lat: coords?.lat,
+        lng: coords?.lng,
+      });
+      return res.json({
+        ...measurement,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+      });
+    } catch (error) {
+      if (error instanceof RoofMeasurementUnavailableError) {
+        return res.status(422).json({
+          error: error.message,
+          code: error.code,
+          providerStatus: getRoofScanProviderStatus(),
+        });
+      }
+
+      console.error("[RoofScan] Legacy /api/measure failed:", error);
+      return res.status(500).json({
+        error: "Roof measurement failed. No estimated values were generated.",
+        code: "ROOF_MEASUREMENT_ERROR",
       });
     }
-    const solarData = await getGoogleSolarData(coords.lat, coords.lng);
-    if (solarData?.solarPotential?.roofSegmentStats) {
-      const segs = solarData.solarPotential.roofSegmentStats;
-      const totalM2 = segs.reduce((s: number, seg: any) => s + (seg.stats?.areaMeters2 || 0), 0);
-      const totalSqFt = totalM2 * 10.764;
-      const squares = Math.round(totalSqFt / 100);
-      return res.json({
-        source: "google-solar",
-        address,
-        squares,
-        totalArea: Math.round(totalSqFt),
-        pitch: "varies",
-        facets: segs.length,
-        lat: coords.lat, lng: coords.lng,
-        rawSegments: segs,
-      });
-    }
-    // Geocode worked but Solar API unavailable — smart estimate
-    const mockSquares = Math.round((1400 + Math.random() * 1600) / 100);
-    res.json({
-      source: "estimate",
-      address,
-      squares: mockSquares,
-      totalArea: mockSquares * 100,
-      pitch: "6/12",
-      lat: coords.lat, lng: coords.lng,
-      note: "Estimated measurement — add Google Solar API access for precise satellite data",
-    });
   });
 
   // ─── STORM / WEATHER ALERTS ───────────────────────────────────────────────
@@ -677,59 +659,114 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json({ success: true, emailLog, note: "Email logged. Connect SMTP/SendGrid in Settings to actually send emails." });
   });
 
-  // ─── STANDALONE MEASUREMENTS ─────────────────────────────────────────────────
+  // ─── STANDALONE MEASUREMENTS / CW ROOFSCAN ───────────────────────────────────
   app.get("/api/measurements", (req, res) => res.json(storage.getMeasurements()));
+
+  app.get("/api/config/roofscan-status", (_req, res) => {
+    const providers = getRoofScanProviderStatus();
+    res.json({
+      ready: providers.some((provider) => provider.configured),
+      providers,
+      policy: "verified-only",
+    });
+  });
+
+  // RoofScan Lab: inspect CW worker prototype output without saving a measurement.
+  app.post("/api/roofscan/diagnostics", async (req, res) => {
+    const { address } = req.body;
+    if (!address) return res.status(400).json({ error: "Address required" });
+
+    const workerUrl = storage.getSetting("roofscan_worker_url")?.replace(/\/$/, "");
+    const workerToken = storage.getSetting("roofscan_worker_token");
+    if (!workerUrl || !workerToken) {
+      return res.status(503).json({
+        error: "CW RoofScan worker is not configured.",
+        code: "ROOFSCAN_WORKER_NOT_CONFIGURED",
+      });
+    }
+
+    const coords = await geocodeAddress(address);
+    if (!coords) {
+      return res.status(422).json({
+        error: "Address could not be geocoded for RoofScan diagnostics.",
+        code: "ROOFSCAN_GEOCODE_FAILED",
+      });
+    }
+
+    try {
+      const response = await fetch(workerUrl + "/v1/measure", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + workerToken,
+        },
+        body: JSON.stringify({ address, lat: coords.lat, lng: coords.lng }),
+        signal: AbortSignal.timeout(120000),
+      });
+      const bodyText = await response.text();
+      let payload: any;
+      try {
+        payload = JSON.parse(bodyText);
+      } catch {
+        payload = { raw: bodyText };
+      }
+
+      if (!response.ok) {
+        return res.status(502).json({
+          error: "RoofScan worker diagnostic request failed.",
+          workerStatus: response.status,
+          details: payload,
+        });
+      }
+
+      return res.json({
+        address,
+        lat: coords.lat,
+        lng: coords.lng,
+        saved: false,
+        warning: "Prototype diagnostic only. This result was not saved as a customer measurement.",
+        ...payload,
+      });
+    } catch (error: any) {
+      console.error("[RoofScan] Diagnostic request failed:", error);
+      return res.status(502).json({
+        error: "RoofScan worker could not be reached.",
+        code: "ROOFSCAN_WORKER_UNREACHABLE",
+        details: error?.message,
+      });
+    }
+  });
 
   app.post("/api/measurements", async (req, res) => {
     const { address, notes, linkLeadAutomatically } = req.body;
     if (!address) return res.status(400).json({ error: "Address required" });
 
-    // Geocode first (needed for both Artemis and Google Solar fallback)
+    // Geocoding is used only to locate the property for licensed providers.
+    // It is not used to derive roofing geometry.
     const coords = await geocodeAddress(address);
 
-    let measureResult: any = null;
-
-    // TIER 1: Try Artemis (Nearmap/Vexcel -- most accurate, ~$5.75/report)
-    const artemisData = await getArtemisRoofReport(address, coords?.lat, coords?.lng);
-    if (artemisData && (artemisData.squares || artemisData.roofArea)) {
-      measureResult = parseArtemisReport(artemisData, address);
-    }
-
-    // TIER 2: Google Solar API fallback
-    if (!measureResult && coords) {
-      const solarData = await getGoogleSolarData(coords.lat, coords.lng);
-      if (solarData && solarData.solarPotential && solarData.solarPotential.roofSegmentStats) {
-        const segs = solarData.solarPotential.roofSegmentStats;
-        const totalM2 = segs.reduce((s: number, seg: any) => s + (seg.stats ? seg.stats.areaMeters2 : 0), 0);
-        const totalSqFt = totalM2 * 10.764;
-        measureResult = {
-          squares: Math.round(totalSqFt / 100),
-          totalArea: Math.round(totalSqFt),
-          pitch: "varies",
-          facets: segs.length,
-          source: "google-solar",
-          rawData: JSON.stringify(segs),
-        };
+    let measureResult;
+    try {
+      measureResult = await measureRoof({
+        address,
+        lat: coords?.lat,
+        lng: coords?.lng,
+      });
+    } catch (error) {
+      if (error instanceof RoofMeasurementUnavailableError) {
+        return res.status(422).json({
+          error: error.message,
+          code: error.code,
+          providerStatus: getRoofScanProviderStatus(),
+        });
       }
+      console.error("[RoofScan] Measurement failed:", error);
+      return res.status(500).json({
+        error: "Roof measurement failed. No measurement was saved.",
+        code: "ROOF_MEASUREMENT_ERROR",
+      });
     }
 
-    // TIER 3: Smart estimate (no imagery available)
-    if (!measureResult) {
-      const sq = Math.round((1200 + Math.random() * 1800) / 100);
-      measureResult = {
-        squares: sq,
-        totalArea: sq * 100,
-        pitch: "6/12",
-        facets: Math.floor(4 + Math.random() * 8),
-        ridgeLength: Math.round(30 + Math.random() * 40),
-        valleyLength: Math.round(10 + Math.random() * 30),
-        eaveLength: Math.round(80 + Math.random() * 120),
-        source: coords ? "estimated" : "demo",
-        rawData: null,
-      };
-    }
-
-    // Auto-link to a lead if address matches
     let linkedLeadId: number | undefined;
     let linkedLead: any = null;
     if (linkLeadAutomatically !== false) {
@@ -741,12 +778,12 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     }
 
     const measurement = storage.createMeasurement({
+      ...measureResult,
       address,
       lat: coords ? coords.lat : undefined,
       lng: coords ? coords.lng : undefined,
       notes,
       linkedLeadId,
-      ...measureResult,
     });
 
     res.json({ measurement, linkedLead, source: measureResult.source });
@@ -815,7 +852,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
   app.get("/api/settings", (req, res) => {
-    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key"];
+    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key", "artemis_api_url", "roofscan_worker_token"];
     const settings = storage.getAllSettings().map((s: any) =>
       SENSITIVE.includes(s.key) && s.value ? { ...s, value: "***" } : s
     );
@@ -853,8 +890,13 @@ export function registerRoutes(httpServer: Server, app: Express): void {
         rawText = fileBuffer.toString("utf8");
       } else {
         // PDF report
-        const pdfData = await pdfParse(fileBuffer);
-        rawText = pdfData.text;
+        const parser = new PDFParse({ data: fileBuffer });
+        try {
+          const pdfData = await parser.getText();
+          rawText = pdfData.text;
+        } finally {
+          await parser.destroy();
+        }
       }
 
       let extracted: any = { source: "uploaded-report", rawText };
@@ -1003,8 +1045,6 @@ ${rawText.slice(0, 8000)}`;
         source: "uploaded-report",
         rawData: JSON.stringify({ provider: extracted.provider, reportId: extracted.reportId, reportDate: extracted.reportDate }),
         notes: `Parsed from ${extracted.provider} PDF report`,
-        lat: lead?.lat || null,
-        lng: lead?.lng || null,
       });
 
       res.json({
