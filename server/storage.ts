@@ -615,7 +615,12 @@ export const storage: IStorage = {
   // ─── SETTINGS ────────────────────────────────────────────────────────────
   getSetting(key) {
     const r = db.select().from(settings).where(eq(settings.key, key)).get();
-    return r?.value;
+    if (r?.value) return r.value;
+
+    // Deployment-friendly fallback: settings can be supplied as environment
+    // variables using the upper-case key name (e.g. ROOFSCAN_WORKER_URL).
+    // Database values still take precedence when configured through the UI.
+    return process.env[key.toUpperCase()];
   },
   setSetting(key, value) {
     const existing = db.select().from(settings).where(eq(settings.key, key)).get();
