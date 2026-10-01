@@ -387,58 +387,39 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     res.json(est);
   });
 
-  // ─── ROOF MEASUREMENT via Google Solar API ────────────────────────────────
+  // ─── ROOF MEASUREMENT (legacy endpoint backed by CW RoofScan) ────────────────
   app.post("/api/measure", async (req, res) => {
     const { address } = req.body;
     if (!address) return res.status(400).json({ error: "Address required" });
+
     const coords = await geocodeAddress(address);
-    if (!coords) {
-      // Return a mock measurement for demo
-      const mockSquares = Math.round((1200 + Math.random() * 1800) / 100);
-      return res.json({
-        source: "demo",
+
+    try {
+      const measurement = await measureRoof({
         address,
-        squares: mockSquares,
-        totalArea: mockSquares * 100,
-        pitch: "6/12",
-        facets: Math.floor(4 + Math.random() * 8),
-        ridgeLength: Math.round(30 + Math.random() * 40),
-        valleyLength: Math.round(10 + Math.random() * 30),
-        eaveLength: Math.round(80 + Math.random() * 120),
-        hipLength: Math.round(20 + Math.random() * 30),
-        rakeLength: Math.round(40 + Math.random() * 60),
-        lat: null, lng: null,
-        note: "Demo measurement — add Google Maps API key in Settings for real satellite data",
+        lat: coords?.lat,
+        lng: coords?.lng,
+      });
+      return res.json({
+        ...measurement,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+      });
+    } catch (error) {
+      if (error instanceof RoofMeasurementUnavailableError) {
+        return res.status(422).json({
+          error: error.message,
+          code: error.code,
+          providerStatus: getRoofScanProviderStatus(),
+        });
+      }
+
+      console.error("[RoofScan] Legacy /api/measure failed:", error);
+      return res.status(500).json({
+        error: "Roof measurement failed. No estimated values were generated.",
+        code: "ROOF_MEASUREMENT_ERROR",
       });
     }
-    const solarData = await getGoogleSolarData(coords.lat, coords.lng);
-    if (solarData?.solarPotential?.roofSegmentStats) {
-      const segs = solarData.solarPotential.roofSegmentStats;
-      const totalM2 = segs.reduce((s: number, seg: any) => s + (seg.stats?.areaMeters2 || 0), 0);
-      const totalSqFt = totalM2 * 10.764;
-      const squares = Math.round(totalSqFt / 100);
-      return res.json({
-        source: "google-solar",
-        address,
-        squares,
-        totalArea: Math.round(totalSqFt),
-        pitch: "varies",
-        facets: segs.length,
-        lat: coords.lat, lng: coords.lng,
-        rawSegments: segs,
-      });
-    }
-    // Geocode worked but Solar API unavailable — smart estimate
-    const mockSquares = Math.round((1400 + Math.random() * 1600) / 100);
-    res.json({
-      source: "estimate",
-      address,
-      squares: mockSquares,
-      totalArea: mockSquares * 100,
-      pitch: "6/12",
-      lat: coords.lat, lng: coords.lng,
-      note: "Estimated measurement — add Google Solar API access for precise satellite data",
-    });
   });
 
   // ─── STORM / WEATHER ALERTS ───────────────────────────────────────────────
@@ -805,7 +786,7 @@ export function registerRoutes(httpServer: Server, app: Express): void {
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
   app.get("/api/settings", (req, res) => {
-    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key"];
+    const SENSITIVE = ["google_maps_api_key", "openai_api_key", "sendgrid_api_key", "hailtrace_api_key", "companycam_api_key", "artemis_api_key", "artemis_api_url"];
     const settings = storage.getAllSettings().map((s: any) =>
       SENSITIVE.includes(s.key) && s.value ? { ...s, value: "***" } : s
     );
