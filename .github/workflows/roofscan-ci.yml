@@ -24,5 +24,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m compileall -q roofscan-worker/app
-      - run: pip install -q numpy scikit-learn pytest
+      - run: pip install -q numpy scikit-learn shapely pytest
       - run: PYTHONPATH=roofscan-worker pytest -q roofscan-worker/tests
