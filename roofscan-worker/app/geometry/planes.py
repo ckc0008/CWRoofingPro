@@ -42,13 +42,16 @@ def segment_roof_planes(
 
         features = np.column_stack([x[remaining], y[remaining]])
         target = z[remaining]
-        min_samples = min(len(remaining), max(20, int(len(remaining) * 0.05)))
+        # A plane z=ax+by+c needs 3 non-collinear samples. Using a large
+        # RANSAC seed makes multi-facet roofs nearly impossible to separate
+        # because the seed is likely to span multiple roof planes.
+        min_samples = 3
         estimator = RANSACRegressor(
             estimator=LinearRegression(),
             min_samples=min_samples,
             residual_threshold=residual_threshold,
             random_state=42 + plane_index,
-            max_trials=250,
+            max_trials=750,
         )
         estimator.fit(features, target)
         mask = estimator.inlier_mask_
