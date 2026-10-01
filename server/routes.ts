@@ -671,6 +671,68 @@ export function registerRoutes(httpServer: Server, app: Express): void {
     });
   });
 
+  // RoofScan Lab: inspect CW worker prototype output without saving a measurement.
+  app.post("/api/roofscan/diagnostics", async (req, res) => {
+    const { address } = req.body;
+    if (!address) return res.status(400).json({ error: "Address required" });
+
+    const workerUrl = storage.getSetting("roofscan_worker_url")?.replace(/\/$/, "");
+    if (!workerUrl) {
+      return res.status(503).json({
+        error: "CW RoofScan worker is not configured.",
+        code: "ROOFSCAN_WORKER_NOT_CONFIGURED",
+      });
+    }
+
+    const coords = await geocodeAddress(address);
+    if (!coords) {
+      return res.status(422).json({
+        error: "Address could not be geocoded for RoofScan diagnostics.",
+        code: "ROOFSCAN_GEOCODE_FAILED",
+      });
+    }
+
+    try {
+      const response = await fetch(workerUrl + "/v1/measure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, lat: coords.lat, lng: coords.lng }),
+        signal: AbortSignal.timeout(120000),
+      });
+      const bodyText = await response.text();
+      let payload: any;
+      try {
+        payload = JSON.parse(bodyText);
+      } catch {
+        payload = { raw: bodyText };
+      }
+
+      if (!response.ok) {
+        return res.status(502).json({
+          error: "RoofScan worker diagnostic request failed.",
+          workerStatus: response.status,
+          details: payload,
+        });
+      }
+
+      return res.json({
+        address,
+        lat: coords.lat,
+        lng: coords.lng,
+        saved: false,
+        warning: "Prototype diagnostic only. This result was not saved as a customer measurement.",
+        ...payload,
+      });
+    } catch (error: any) {
+      console.error("[RoofScan] Diagnostic request failed:", error);
+      return res.status(502).json({
+        error: "RoofScan worker could not be reached.",
+        code: "ROOFSCAN_WORKER_UNREACHABLE",
+        details: error?.message,
+      });
+    }
+  });
+
   app.post("/api/measurements", async (req, res) => {
     const { address, notes, linkLeadAutomatically } = req.body;
     if (!address) return res.status(400).json({ error: "Address required" });
