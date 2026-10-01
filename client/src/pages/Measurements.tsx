@@ -75,6 +75,10 @@ function MeasurementCard({ m, onDelete }: { m: any; onDelete: () => void }) {
         {m.ridgeLength && <span>Ridge: <span style={{ color: "var(--color-text)" }}>{m.ridgeLength} ft</span></span>}
         {m.valleyLength && <span>Valley: <span style={{ color: "var(--color-text)" }}>{m.valleyLength} ft</span></span>}
         {m.eaveLength && <span>Eave: <span style={{ color: "var(--color-text)" }}>{m.eaveLength} ft</span></span>}
+        {m.hipLength && <span>Hip: <span style={{ color: "var(--color-text)" }}>{m.hipLength} ft</span></span>}
+        {m.rakeLength && <span>Rake: <span style={{ color: "var(--color-text)" }}>{m.rakeLength} ft</span></span>}
+        {m.confidence != null && <span>Confidence: <span style={{ color: "var(--color-text)" }}>{Math.round(m.confidence * 100)}%</span></span>}
+        {m.imageryDate && <span>Imagery: <span style={{ color: "var(--color-text)" }}>{m.imageryDate}</span></span>}
       </div>
 
       {/* Linked Lead */}
@@ -281,6 +285,9 @@ export default function Measurements() {
                 {lastResult.measurement.ridgeLength && <span>Ridge: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.ridgeLength} ft</strong></span>}
                 {lastResult.measurement.valleyLength && <span>Valley: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.valleyLength} ft</strong></span>}
                 {lastResult.measurement.eaveLength && <span>Eave: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.eaveLength} ft</strong></span>}
+                {lastResult.measurement.hipLength && <span>Hip: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.hipLength} ft</strong></span>}
+                {lastResult.measurement.rakeLength && <span>Rake: <strong style={{ color: "var(--color-text)" }}>{lastResult.measurement.rakeLength} ft</strong></span>}
+                {lastResult.measurement.confidence != null && <span>Confidence: <strong style={{ color: "var(--color-text)" }}>{Math.round(lastResult.measurement.confidence * 100)}%</strong></span>}
               </div>
             )}
 
