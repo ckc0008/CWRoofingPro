@@ -82,3 +82,8 @@ Measurements failing acceptance should be marked for review.
 - Add roof geometry editor and confidence display.
 - Persist provider metadata, imagery date and confidence in the measurement schema.
 - Add benchmark fixtures from verified CW roofs.
+
+## Current data pins
+
+- Overture building footprints default to release `2026-09-23.1`; keep this configurable so releases can be advanced deliberately.
+- USGS 3DEP discovery uses TNMAccess with the `Lidar Point Cloud (LPC)` dataset and LAS/LAZ products.
