@@ -30,3 +30,18 @@ Optional environment variables:
 ## Verification gate still required
 
 Before the worker can emit `verified`, implement multi-plane segmentation, ridge/hip/valley topology, eave/rake classification, 3D facet-area calculations, obstruction handling and benchmark acceptance tests.
+
+## Same-day Railway deployment
+
+1. Create a Railway service from this GitHub repository.
+2. Set the service Root Directory to `/roofscan-worker`.
+3. Railway will detect `roofscan-worker/Dockerfile`.
+4. Add `ROOFSCAN_API_TOKEN` with a long random value.
+5. For prototype field diagnostics, set `ROOFSCAN_ENABLE_LIDAR_PROTOTYPE=true`.
+6. Generate a public Railway domain.
+7. In CW Roofing Pro Settings, set:
+   - `CW RoofScan Worker URL` = the Railway service URL
+   - `CW RoofScan Worker Token` = the exact same token
+8. Verify `/health` returns OK and use RoofScan Lab on the Measurements page.
+
+The worker uses Railway's injected `PORT` automatically. The `/v1/measure` endpoint requires bearer authentication. Keep the prototype verification gate enabled; prototype results are never automatically saved as customer measurements.
