@@ -5,7 +5,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.geometry.lidar_prototype import dominant_roof_plane
-from app.services.overture import find_building
+from app.services.overture import find_building as find_overture_building
+from app.services.fema import find_building as find_fema_building
 from app.services.usgs import find_lidar_products
 
 app = FastAPI(title='CW RoofScan Worker', version='0.1.0')
@@ -40,17 +41,34 @@ def ready():
 
 @app.post('/v1/measure', dependencies=[Depends(require_api_token)])
 def measure(request: MeasureRequest) -> dict[str, Any]:
+    overture_error = None
     try:
-        building = find_building(request.lat, request.lng)
+        building = find_overture_building(request.lat, request.lng)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f'Building lookup failed: {exc}') from exc
+        building = None
+        overture_error = str(exc)
+
+    building_provider = 'Overture Maps'
+    fema_error = None
+    if not building:
+        try:
+            building = find_fema_building(request.lat, request.lng)
+        except Exception as exc:
+            building = None
+            fema_error = str(exc)
+        if building:
+            building_provider = 'FEMA USA Structures'
 
     if not building:
         return {
             'status': 'insufficient_data',
-            'reason': 'No Overture building footprint was found near the requested location.',
+            'reason': 'No open building footprint was found near the requested location.',
             'measurement': None,
-            'provenance': {'buildingProvider': 'Overture Maps'},
+            'provenance': {
+                'buildingProvider': None,
+                'overtureError': overture_error,
+                'femaError': fema_error,
+            },
         }
 
     try:
@@ -62,10 +80,12 @@ def measure(request: MeasureRequest) -> dict[str, Any]:
         lidar_error = None
 
     provenance = {
-        'buildingProvider': 'Overture Maps',
+        'buildingProvider': building_provider,
         'overtureRelease': building.get('overtureRelease'),
         'buildingId': building.get('id'),
         'footprintAreaSqFt': building.get('footprintAreaSqFt'),
+        'overtureError': overture_error,
+        'femaError': fema_error,
         'lidarProvider': 'USGS 3DEP',
         'lidarProductsFound': len(lidar_products),
         'lidarError': lidar_error,

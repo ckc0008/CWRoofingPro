@@ -939,43 +939,73 @@ export function registerRoutes(httpServer: Server, app: Express): void {
 
     const suggestions: any[] = [];
 
-    // Prefer Places Autocomplete when the Places API is enabled.
+    // Places API (New). Bias toward CW Roofing's normal market in Southeast
+    // Texas / Southwest Louisiana while still allowing U.S. results outside it.
     try {
-      const placesUrl =
-        "https://maps.googleapis.com/maps/api/place/autocomplete/json" +
-        `?input=${encodeURIComponent(input)}&types=address&components=country:us&key=${apiKey}`;
-      const placesResponse = await fetch(placesUrl, { signal: AbortSignal.timeout(8000) });
+      const placesResponse = await fetch(
+        "https://places.googleapis.com/v1/places:autocomplete",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask":
+              "suggestions.placePrediction.placeId," +
+              "suggestions.placePrediction.text.text," +
+              "suggestions.placePrediction.structuredFormat.mainText.text," +
+              "suggestions.placePrediction.structuredFormat.secondaryText.text",
+          },
+          body: JSON.stringify({
+            input,
+            includedRegionCodes: ["us"],
+            regionCode: "us",
+            locationBias: {
+              rectangle: {
+                low: { latitude: 28.0, longitude: -96.8 },
+                high: { latitude: 31.5, longitude: -92.5 },
+              },
+            },
+          }),
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+
       if (placesResponse.ok) {
         const placesData: any = await placesResponse.json();
-        if (placesData.status === "OK" && Array.isArray(placesData.predictions)) {
-          for (const prediction of placesData.predictions.slice(0, 6)) {
-            suggestions.push({
-              id: prediction.place_id,
-              description: prediction.description,
-              mainText: prediction.structured_formatting?.main_text || prediction.description,
-              secondaryText: prediction.structured_formatting?.secondary_text || "",
-            });
-          }
-        } else if (placesData.status && placesData.status !== "ZERO_RESULTS") {
-          console.warn("[Maps] Places autocomplete unavailable:", placesData.status, placesData.error_message || "");
+        for (const item of (placesData.suggestions || []).slice(0, 6)) {
+          const prediction = item?.placePrediction;
+          if (!prediction?.text?.text) continue;
+          suggestions.push({
+            id: prediction.placeId || prediction.text.text,
+            description: prediction.text.text,
+            mainText: prediction.structuredFormat?.mainText?.text || prediction.text.text,
+            secondaryText: prediction.structuredFormat?.secondaryText?.text || "",
+          });
         }
+      } else {
+        const details = await placesResponse.text().catch(() => "");
+        console.warn("[Maps] Places API (New) unavailable:", placesResponse.status, details.slice(0, 300));
       }
     } catch (error) {
-      console.warn("[Maps] Places autocomplete request failed:", error);
+      console.warn("[Maps] Places API (New) request failed:", error);
     }
 
-    // Geocoding fallback keeps the type-ahead usable even when the Places API
-    // has not been enabled on the Google Cloud project yet.
+    // Geocoding fallback. Restrict it to the U.S. so partial Chambers County
+    // addresses never jump to Australia or other countries.
     if (suggestions.length === 0) {
       try {
         const geocodeUrl =
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(input)}&key=${apiKey}`;
+          "https://maps.googleapis.com/maps/api/geocode/json" +
+          `?address=${encodeURIComponent(input)}` +
+          "&components=country:US&region=us" +
+          "&bounds=28.0,-96.8|31.5,-92.5" +
+          `&key=${apiKey}`;
         const geocodeResponse = await fetch(geocodeUrl, { signal: AbortSignal.timeout(8000) });
         if (geocodeResponse.ok) {
           const geocodeData: any = await geocodeResponse.json();
           for (const result of (geocodeData.results || []).slice(0, 6)) {
             const parsed = parseGoogleAddressResult(result);
-            if (!parsed) continue;
+            if (!parsed || parsed.state && !["TX", "LA"].includes(parsed.state)) continue;
             suggestions.push({
               id: result.place_id || parsed.fullAddress,
               description: parsed.fullAddress,

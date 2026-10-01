@@ -1,6 +1,7 @@
 export type RoofMeasurementSource =
   | "artemis"
   | "cw-open-data"
+  | "google-solar"
   | "eagleview"
   | "nearmap"
   | "uploaded-report"

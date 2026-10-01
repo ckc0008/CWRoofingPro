@@ -22,18 +22,37 @@ def _cached_download(url: str) -> Path:
     path = CACHE_DIR / (hashlib.sha256(url.encode()).hexdigest() + suffix)
     if path.exists() and path.stat().st_size > 0:
         return path
-    with requests.get(url, stream=True, timeout=180) as response:
+
+    temp_path = path.with_suffix(path.suffix + '.part')
+    if temp_path.exists():
+        temp_path.unlink()
+
+    bytes_written = 0
+    with requests.get(url, stream=True, timeout=(30, 240)) as response:
         response.raise_for_status()
-        with path.open('wb') as handle:
+        expected = int(response.headers.get('content-length') or 0)
+        with temp_path.open('wb') as handle:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     handle.write(chunk)
+                    bytes_written += len(chunk)
+
+    if expected and bytes_written != expected:
+        temp_path.unlink(missing_ok=True)
+        raise IOError(f'Incomplete LiDAR download: expected {expected} bytes, received {bytes_written}')
+
+    temp_path.replace(path)
     return path
 
 
 def dominant_roof_plane(building_geojson: dict, lidar_url: str) -> dict:
     path = _cached_download(lidar_url)
-    las = laspy.read(path)
+    try:
+        las = laspy.read(path)
+    except Exception:
+        path.unlink(missing_ok=True)
+        path = _cached_download(lidar_url)
+        las = laspy.read(path)
     source_crs = las.header.parse_crs()
     if source_crs is None:
         raise ValueError('LiDAR file does not declare a CRS')

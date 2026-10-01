@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   artemis: { label: "Artemis", color: "#5cbf00" },
   "cw-open-data": { label: "CW RoofScan", color: "#0ea5e9" },
+  "google-solar": { label: "Google Solar", color: "#f59e0b" },
   eagleview: { label: "EagleView", color: "#2563eb" },
   nearmap: { label: "Nearmap", color: "#14b8a6" },
   "uploaded-report": { label: "Uploaded Report", color: "#8b5cf6" },
